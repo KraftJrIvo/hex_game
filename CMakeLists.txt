@@ -21,14 +21,19 @@ add_executable(embedfile "src/util/embedfile.c")
 add_custom_command(OUTPUT res_tiles.c COMMAND embedfile res_tiles ${HEX_GAME_SOURCE_DIR}/res/tiles.png DEPENDS ${HEX_GAME_SOURCE_DIR}/res/tiles.png)
 
 # TARGET
-set(HEX_GAME_SOURCE_FILES    
+set(GAME_SOURCE_FILES    
   "src/game.cpp"
   res_tiles.c
 )
 if (GAME_BASE_SHARED_BUILD)
-  add_library(HEX_GAME SHARED ${HEX_GAME_SOURCE_FILES})
+  add_library(GAME_NEW SHARED ${GAME_SOURCE_FILES})
+  add_custom_command(TARGET GAME_NEW
+    POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E remove -f ${GAME_SOURCE_FILES}/build/GAME.dll
+    COMMENT "Removing old dll"
+  )
 else()
-  add_library(HEX_GAME ${HEX_GAME_SOURCE_FILES})
+  add_library(GAME ${GAME_SOURCE_FILES})
 endif()
 
 # DEPENDENCIES
@@ -58,4 +63,8 @@ target_compile_options(raylib PUBLIC -DRAYMATH_DISABLE_CPP_OPERATORS)
 target_compile_options(raylib PUBLIC -DMANUAL_INPUT_EVENTS_POLLING)
 target_compile_options(raylib PUBLIC -DGRAPHICS_API_OPENGL_33)
 
-target_link_libraries(HEX_GAME PUBLIC raylib)
+if (GAME_BASE_SHARED_BUILD)
+  target_link_libraries(GAME_NEW PUBLIC raylib)
+else()
+  target_link_libraries(GAME PUBLIC raylib)
+endif()
