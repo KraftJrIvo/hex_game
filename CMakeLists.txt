@@ -27,6 +27,7 @@ set(GAME_SOURCE_FILES
 )
 if (GAME_BASE_SHARED_BUILD)
   add_library(GAME_NEW SHARED ${GAME_SOURCE_FILES})
+  target_compile_definitions(GAME_NEW PRIVATE GAME_BASE_DLL)
   add_custom_command(TARGET GAME_NEW
     POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E remove -f ${GAME_SOURCE_FILES}/build/GAME.dll

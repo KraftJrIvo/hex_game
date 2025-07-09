@@ -10,7 +10,6 @@
 
 extern "C" const unsigned char res_tiles[];
 extern "C" const size_t        res_tiles_len;
-Texture2D tiles;
 
 #if (defined(_WIN32) || defined(_WIN64)) && defined(GAME_BASE_DLL)
 #define DLL_EXPORT __declspec(dllexport)
@@ -166,7 +165,7 @@ extern "C" {
 
         float bHeight = ROW_HEIGHT * BOARD_HEIGHT;
 
-        tiles = LoadTextureFromImage(LoadImageFromMemory(".png", res_tiles, res_tiles_len));
+        gs.tiles = LoadTextureFromImage(LoadImageFromMemory(".png", res_tiles, res_tiles_len));
     }
 
     void shootAndRearm(GameState& gs) {
@@ -485,11 +484,11 @@ extern "C" {
         //DrawCircle(pos.x, pos.y, TILE_RADIUS, COLORS[thing.clr]);
         pos = {(float)int(pos.x), (float)int(pos.y)};
         if (gs.n_params == 1)
-            DrawTexturePro(tiles, {0.0f, 0.0f, 16.0f, 17.0f}, {pos.x - TILE_RADIUS, pos.y - TILE_RADIUS, TILE_RADIUS * 2, TILE_RADIUS * 2 + TILE_RADIUS * 2.0f/17.0f}, {0, 0}, 0, COLORS[thing.clr]);
+            DrawTexturePro(gs.tiles, {0.0f, 0.0f, 16.0f, 17.0f}, {pos.x - TILE_RADIUS, pos.y - TILE_RADIUS, TILE_RADIUS * 2, TILE_RADIUS * 2 + TILE_RADIUS * 2.0f/17.0f}, {0, 0}, 0, COLORS[thing.clr]);
         else if (gs.n_params >= 2)
-            DrawTexturePro(tiles, {16.0f * thing.shp, 0.0f, 16.0f, 17.0f}, {pos.x - TILE_RADIUS, pos.y - TILE_RADIUS, TILE_RADIUS * 2, TILE_RADIUS * 2 + TILE_RADIUS * 2.0f/16.0f}, {0, 0}, 0, COLORS[thing.clr]);
+            DrawTexturePro(gs.tiles, {16.0f * thing.shp, 0.0f, 16.0f, 17.0f}, {pos.x - TILE_RADIUS, pos.y - TILE_RADIUS, TILE_RADIUS * 2, TILE_RADIUS * 2 + TILE_RADIUS * 2.0f/16.0f}, {0, 0}, 0, COLORS[thing.clr]);
         if (gs.n_params >= 3)
-            DrawTexturePro(tiles, {16.0f * thing.sym, 16.0f, 16.0f, 16.0f}, {pos.x - TILE_RADIUS, pos.y - TILE_RADIUS, TILE_RADIUS * 2, TILE_RADIUS * 2}, {0, 0}, 0, COLORS[thing.clr]);
+            DrawTexturePro(gs.tiles, {16.0f * thing.sym, 16.0f, 16.0f, 16.0f}, {pos.x - TILE_RADIUS, pos.y - TILE_RADIUS, TILE_RADIUS * 2, TILE_RADIUS * 2}, {0, 0}, 0, COLORS[thing.clr]);
         //for (auto& n : thing.neighs)
         //    if (n.exists) DrawLineV(pos, (getPixByPos(gs, n.pos) + pos) * 0.5, WHITE);
     }
