@@ -431,7 +431,11 @@ extern "C" {
     {
         auto delta = GetFrameTime() / UPDATE_ITS;
 
+#ifdef PLATFORM_ANDROID
+        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+#else
         if (fabs(GetMouseDelta().x) > 0) {
+#endif
             Vector2 gunPos = {(float)GetScreenWidth() * 0.5f, (float)GetScreenHeight() - TILE_RADIUS};
             gs.gun.dir = atan2(gunPos.y - GetMouseY(), GetMouseX() - gunPos.x) - PI * 0.5f;      
         } else if (IsKeyDown(KEY_LEFT)) {
@@ -480,7 +484,11 @@ extern "C" {
         if (IsKeyPressed(KEY_Q))
             gs.n_params = (gs.n_params % 3) + 1;
 
+#ifdef PLATFORM_ANDROID
+        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && !gs.bullet.exists)
+#else
         if ((IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) && !gs.bullet.exists)
+#endif
             shootAndRearm(gs);
     }
 

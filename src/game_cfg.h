@@ -6,10 +6,13 @@
 #define BOARD_EMP_BOT_ROW_GAP 5
 #define RAND_FLOAT static_cast <float> (rand()) / (static_cast <float> (RAND_MAX) + 1.0f)
 #define UPDATE_ITS  5
-#define TILE_RADIUS 24
 #define ROW_HEIGHT (float)(TILE_RADIUS * sqrt(3))
 #define BOARD_MOVE_TIME_PER_LINE 5.0f
-#define BULLET_SPEED 1500.0f
+#ifdef PLATFORM_ANDROID
+    #define BULLET_SPEED 4500.0f
+#else
+    #define BULLET_SPEED 1500.0f
+#endif
 #define BULLET_RADIUS_V TILE_RADIUS
 #define BULLET_RADIUS_H TILE_RADIUS * 0.6f
 #define BULLET_REBOUNCE TILE_RADIUS
