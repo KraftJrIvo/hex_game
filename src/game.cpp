@@ -154,8 +154,13 @@ extern "C" {
         gs.gun.armed.sym = (unsigned char)getRandVal(gs, 0, COLORS.size() - 1);
     }
 
-    DLL_EXPORT void init(GameState& gs)
+    void loadAssets(GameAssets& ga) {
+        ga.tiles = LoadTextureFromImage(LoadImageFromMemory(".png", res_tiles, res_tiles_len));
+    }
+
+    DLL_EXPORT void init(GameAssets& ga, GameState& gs)
     {
+        loadAssets(ga);
         gs = GameState{0};
         
         gs.seed = rand() % std::numeric_limits<int>::max();
@@ -164,9 +169,7 @@ extern "C" {
 
         rearm(gs);
 
-        float bHeight = ROW_HEIGHT * BOARD_HEIGHT;
-
-        gs.tiles = LoadTextureFromImage(LoadImageFromMemory(".png", res_tiles, res_tiles_len));
+        float bHeight = ROW_HEIGHT * BOARD_HEIGHT;        
     }
 
     void shootAndRearm(GameState& gs) {
@@ -481,35 +484,35 @@ extern "C" {
             shootAndRearm(gs);
     }
 
-    void drawThing(const GameState& gs, Vector2 pos, const Thing& thing) {
+    void drawThing(const GameAssets& ga, const GameState& gs, Vector2 pos, const Thing& thing) {
         //DrawCircle(pos.x, pos.y, TILE_RADIUS, COLORS[thing.clr]);
         pos = {(float)int(pos.x), (float)int(pos.y)};
         if (gs.n_params == 1)
-            DrawTexturePro(gs.tiles, {0.0f, 0.0f, 16.0f, 17.0f}, {pos.x - TILE_RADIUS, pos.y - TILE_RADIUS, TILE_RADIUS * 2, TILE_RADIUS * 2 + TILE_RADIUS * 2.0f/17.0f}, {0, 0}, 0, COLORS[thing.clr]);
+            DrawTexturePro(ga.tiles, {0.0f, 0.0f, 16.0f, 17.0f}, {pos.x - TILE_RADIUS, pos.y - TILE_RADIUS, TILE_RADIUS * 2, TILE_RADIUS * 2 + TILE_RADIUS * 2.0f/17.0f}, {0, 0}, 0, COLORS[thing.clr]);
         else if (gs.n_params >= 2)
-            DrawTexturePro(gs.tiles, {16.0f * thing.shp, 0.0f, 16.0f, 17.0f}, {pos.x - TILE_RADIUS, pos.y - TILE_RADIUS, TILE_RADIUS * 2, TILE_RADIUS * 2 + TILE_RADIUS * 2.0f/16.0f}, {0, 0}, 0, COLORS[thing.clr]);
+            DrawTexturePro(ga.tiles, {16.0f * thing.shp, 0.0f, 16.0f, 17.0f}, {pos.x - TILE_RADIUS, pos.y - TILE_RADIUS, TILE_RADIUS * 2, TILE_RADIUS * 2 + TILE_RADIUS * 2.0f/16.0f}, {0, 0}, 0, COLORS[thing.clr]);
         if (gs.n_params >= 3)
-            DrawTexturePro(gs.tiles, {16.0f * thing.sym, 16.0f, 16.0f, 16.0f}, {pos.x - TILE_RADIUS, pos.y - TILE_RADIUS, TILE_RADIUS * 2, TILE_RADIUS * 2}, {0, 0}, 0, COLORS[thing.clr]);
+            DrawTexturePro(ga.tiles, {16.0f * thing.sym, 16.0f, 16.0f, 16.0f}, {pos.x - TILE_RADIUS, pos.y - TILE_RADIUS, TILE_RADIUS * 2, TILE_RADIUS * 2}, {0, 0}, 0, COLORS[thing.clr]);
         //for (auto& n : thing.neighs)
         //    if (n.exists) DrawLineV(pos, (getPixByPos(gs, n.pos) + pos) * 0.5, WHITE);
     }
 
-    void drawParticles(GameState& gs) {
+    void drawParticles(const GameAssets& ga, const GameState& gs) {
         for (int i = 0; i < gs.particles.count(); ++i) {
-            auto& prt = gs.particles.at(i);
+            auto& prt = gs.particles.get(i);
             if (prt.exists)
-                drawThing(gs, prt.pos, prt.thing);
+                drawThing(ga, gs, prt.pos, prt.thing);
         }
     }
 
-    void drawBoard(const GameState& gs) {
+    void drawBoard(const GameAssets& ga, const GameState& gs) {
         for (int i = 0; i < BOARD_HEIGHT; ++i) {
             for (int j = 0; j < BOARD_WIDTH - ((i + gs.board.even) % 2); ++j) {
                 const Tile& tile = gs.board.things[i][j];
                 if (tile.ref.exists) {
                     Vector2 tpos = getPixByPos(gs, {i, j});
                     Vector2 shake = (2.0f * Vector2{RAND_FLOAT - 0.5f, RAND_FLOAT - 0.5f}) * tile.shake * SHAKE_STR;
-                    drawThing(gs, tpos + shake, tile.thing);
+                    drawThing(ga, gs, tpos + shake, tile.thing);
                 }
             }
         }
@@ -523,14 +526,14 @@ extern "C" {
         //    DrawCircleV(getPixByPos(gs, mpos), 5, WHITE);
     }
 
-    void drawBullet(const GameState& gs) {
-        drawThing(gs, gs.bullet.pos, gs.bullet.thing);
+    void drawBullet(const GameAssets& ga, const GameState& gs) {
+        drawThing(ga, gs, gs.bullet.pos, gs.bullet.thing);
     }
 
-    void drawGun(const GameState& gs) {
+    void drawGun(const GameAssets& ga, const GameState& gs) {
         Vector2 gunPos = {(float)GetScreenWidth() * 0.5f, (float)GetScreenHeight() - TILE_RADIUS};
         DrawCircleV(gunPos, TILE_RADIUS + 3, WHITE);
-        drawThing(gs, gunPos, gs.gun.armed);
+        drawThing(ga, gs, gunPos, gs.gun.armed);
 
         const int NTICKS = 50;
         const float TICKSTEP = TILE_RADIUS * 2;
@@ -540,22 +543,26 @@ extern "C" {
             pos += TICKSTEP * Vector2{cos(dir), -sin(dir)};
             DrawCircleV(pos, 3, WHITE);
         }
-    }    
+    }
 
-    DLL_EXPORT void updateAndDraw(GameState& gs) 
+    void draw(const GameAssets& ga, const GameState& gs) {
+        BeginDrawing();
+        ClearBackground(BLACK);
+        drawBoard(ga, gs);
+        drawParticles(ga, gs);
+        drawGun(ga, gs);
+        if (gs.bullet.exists)
+            drawBullet(ga, gs);
+        EndDrawing();
+    }
+
+    DLL_EXPORT void updateAndDraw(const GameAssets& ga, GameState& gs) 
     {
         for (int i = 0; i < UPDATE_ITS; ++i)
             update(gs);
         updateOnce(gs);
 
-        BeginDrawing();
-        ClearBackground(BLACK);
-        drawBoard(gs);
-        drawParticles(gs);
-        drawGun(gs);
-        if (gs.bullet.exists)
-            drawBullet(gs);
-        EndDrawing();
+        draw(ga, gs);
     }
 
 } // extern "C"

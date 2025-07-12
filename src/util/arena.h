@@ -45,7 +45,7 @@ public:
         return _data[idx];
     }
 
-    size_t count() {return _firstAvailableIdx;}
+    size_t count() const {return _firstAvailableIdx;}
     size_t capacity() {return CAP;}
 
     void clear() {

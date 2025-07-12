@@ -67,6 +67,10 @@ struct Bullet {
     Arena<MAX_TODROP, ThingPos> todrop;
 };
 
+struct GameAssets {
+    Texture2D tiles;
+};
+
 struct GameState {
     unsigned int seed;
     Board board;
@@ -74,12 +78,11 @@ struct GameState {
     Arena<MAX_PARTICLES, Particle> particles;
     Bullet bullet;
     int n_params = 2;
-    Texture2D tiles;
 };
 
 #ifndef GAME_BASE_DLL
 extern "C" {
-    void init(GameState& gs);
-    void updateAndDraw(GameState& gs);
+    void init(GameAssets& ga, GameState& gs);
+    void updateAndDraw(const GameAssets& ga, GameState& gs);
 }
 #endif
