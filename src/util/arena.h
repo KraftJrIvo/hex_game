@@ -1,12 +1,17 @@
 #include <cstddef>
 #include <vector>
-#include "zpp_bits.h"
+
+#ifdef GAME_BASE_DLL
+#include "../../../src/util/zpp_bits.h"
+#endif
 
 template <size_t CAP, typename T>
 class Arena 
 {
+#ifdef GAME_BASE_DLL
     friend zpp::bits::access;
 	using serialize = zpp::bits::members<2>;
+#endif
 
     std::vector<T> _data;
     size_t _firstAvailableIdx;

@@ -6,6 +6,7 @@
 #include "raymath.h"
 #include <cmath>
 #include <limits>
+#include <algorithm>
 #include <map>
 
 extern "C" const unsigned char res_tiles[];
