@@ -73,7 +73,8 @@ struct GameState {
     Gun gun;
     Arena<MAX_PARTICLES, Particle> particles;
     Bullet bullet;
-    int n_params = 1;
+    int n_params = 2;
+    Texture2D tiles;
 };
 
 #ifndef GAME_BASE_DLL
