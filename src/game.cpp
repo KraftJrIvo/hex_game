@@ -13,8 +13,6 @@ extern "C" const unsigned char res_tiles[];
 extern "C" const size_t        res_tiles_len;
 extern "C" const unsigned char res_font[];
 extern "C" const size_t        res_font_len;
-extern "C" const unsigned char res_font2[];
-extern "C" const size_t        res_font2_len;
 
 #if (defined(_WIN32) || defined(_WIN64)) && defined(GAME_BASE_DLL)
 #define DLL_EXPORT __declspec(dllexport)

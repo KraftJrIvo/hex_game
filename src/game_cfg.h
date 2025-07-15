@@ -7,7 +7,7 @@
 #define WINDOW_HEIGHT  864
 #define BOARD_WIDTH    9
 #define BOARD_HEIGHT   36
-#define TILE_RADIUS    std::min(GetScreenWidth(), 864) / (BOARD_WIDTH * 2.0f)
+#define TILE_RADIUS    std::min(GetScreenWidth(), GetScreenHeight()) / (BOARD_WIDTH * 2.0f)
 #define MAX_PARTICLES  1024
 #define MAX_TODROP     1024
 
