@@ -14,7 +14,7 @@
 #define BOARD_EMP_BOT_ROW_GAP 10
 #define BOARD_WARNING_GAP 3
 #define BOARD_SPEED 1.0f
-#define BOARD_ACC 0.05f
+#define BOARD_ACC 0.01f
 #define RAND_FLOAT static_cast <float> (rand()) / (static_cast <float> (RAND_MAX) + 1.0f)
 #define RAND_FLOAT_SIGNED (2.0f * RAND_FLOAT - 0.5f)
 #define RAND_FLOAT_SIGNED_2D Vector2{RAND_FLOAT_SIGNED, RAND_FLOAT_SIGNED}

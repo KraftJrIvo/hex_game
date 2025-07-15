@@ -588,9 +588,10 @@ extern "C" {
         float coeff = easeOutBounce(1.0f - std::clamp((gs.gameOverTime + GAME_OVER_TIMEOUT - GetTime())/GAME_OVER_TIMEOUT_BEF, 0.0, 1.0));
         DrawTexturePro(ga.tiles, {(int(floor(GetTime() * 10)) % 2 == 0) ? 80.0f : 96.0f, 32.0f, 16.0f, 16.0f}, {GetScreenWidth() * 0.5f - TILE_RADIUS, GetScreenHeight() * -0.25f - TILE_RADIUS + coeff * GetScreenHeight() * 0.5f, TILE_RADIUS * 2, TILE_RADIUS * 2}, {0, 0}, 0, WHITE);
         auto scorestr = std::to_string(gs.score);
-        auto meas = MeasureTextEx(ga.font, scorestr.c_str(), ga.font.baseSize, 1.0);
-        DrawTextEx(ga.font, scorestr.c_str(), {GetScreenWidth() * -0.5f - meas.x * 0.5f + GetScreenWidth() * coeff, GetScreenHeight() * 0.5f - meas.y * 0.5f}, ga.font.baseSize, 1.0, PINK);
-        DrawTextEx(ga.font, scorestr.c_str(), {GetScreenWidth() * 1.5f - meas.x * 0.5f - GetScreenWidth() * coeff, GetScreenHeight() * 0.5f - meas.y * 0.5f}, ga.font.baseSize, 1.0, PINK);
+        auto sz = ga.font.baseSize * floor(TILE_RADIUS * 2 / ga.font.baseSize);
+        auto meas = MeasureTextEx(ga.font, scorestr.c_str(), sz, 1.0);
+        DrawTextEx(ga.font, scorestr.c_str(), {GetScreenWidth() * -0.5f - meas.x * 0.5f + GetScreenWidth() * coeff, GetScreenHeight() * 0.5f - meas.y * 0.5f}, sz, 1.0, PINK);
+        DrawTextEx(ga.font, scorestr.c_str(), {GetScreenWidth() * 1.5f - meas.x * 0.5f - GetScreenWidth() * coeff, GetScreenHeight() * 0.5f - meas.y * 0.5f}, sz, 1.0, PINK);
         DrawTexturePro(ga.tiles, {64.0f, 32.0f, 16.0f, 16.0f}, {GetScreenWidth() * 0.5f - TILE_RADIUS, GetScreenHeight() * 1.25f - TILE_RADIUS - coeff * GetScreenHeight() * 0.5f, TILE_RADIUS * 2, TILE_RADIUS * 2}, {0, 0}, 0, WHITE);
     }
 
