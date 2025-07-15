@@ -19,11 +19,15 @@ project(HEX_GAME VERSION 0.0.1 DESCRIPTION "raylib game base" LANGUAGES CXX C)
 
 add_executable(embedfile "src/util/embedfile.c")
 add_custom_command(OUTPUT res_tiles.c COMMAND embedfile res_tiles ${HEX_GAME_SOURCE_DIR}/res/tiles.png DEPENDS ${HEX_GAME_SOURCE_DIR}/res/tiles.png)
+add_custom_command(OUTPUT res_font.c COMMAND embedfile res_font ${HEX_GAME_SOURCE_DIR}/res/CozetteVector.otf DEPENDS ${HEX_GAME_SOURCE_DIR}/res/CozetteVector.otf)
+add_custom_command(OUTPUT res_font2.c COMMAND embedfile res_font2 ${HEX_GAME_SOURCE_DIR}/res/cozette.fnt DEPENDS ${HEX_GAME_SOURCE_DIR}/res/cozette.fnt)
 
 # TARGET
 set(GAME_SOURCE_FILES    
   "src/game.cpp"
   res_tiles.c
+  res_font.c
+  res_font2.c
 )
 if (GAME_BASE_SHARED_BUILD)
   add_library(GAME_NEW SHARED ${GAME_SOURCE_FILES})

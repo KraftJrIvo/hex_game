@@ -4,14 +4,7 @@
 
 #include "util/arena.h"
 #include "raymath.h"
-
-#define WINDOW_WIDTH   500
-#define WINDOW_HEIGHT  800
-#define BOARD_WIDTH    9
-#define BOARD_HEIGHT   36
-#define TILE_RADIUS    GetScreenWidth() / (BOARD_WIDTH * 2.0f)
-#define MAX_PARTICLES  1024
-#define MAX_TODROP     1024
+#include "game_cfg.h"
 
 struct ThingPos {
     int row, col;
@@ -35,6 +28,7 @@ struct Tile {
 
 struct Board {
     float pos = 0;
+    float speed = BOARD_SPEED;
     int nFulRowsTop = 0;
     std::array<std::array<Tile, BOARD_WIDTH>, BOARD_HEIGHT> things;
     bool even = false;
@@ -70,6 +64,7 @@ struct Bullet {
 
 struct GameAssets {
     Texture2D tiles;
+    Font font;
 };
 
 struct GameState {
@@ -79,6 +74,12 @@ struct GameState {
     Arena<MAX_PARTICLES, Particle> particles;
     Bullet bullet;
     int n_params = 2;
+    int score = 0;
+    bool firstShotFired = false;
+    bool gameOver = false;
+    double gameStartTime;
+    double gameOverTime;
+    double focusTime;
 };
 
 #ifndef GAME_BASE_DLL
