@@ -26,7 +26,6 @@ set(GAME_SOURCE_FILES
   "src/game.cpp"
   res_tiles.c
   res_font.c
-  res_font2.c
 )
 if (GAME_BASE_SHARED_BUILD)
   add_library(GAME_NEW SHARED ${GAME_SOURCE_FILES})
