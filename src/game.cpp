@@ -269,6 +269,7 @@ extern "C" {
         if (checkBounds(gs, pos) && (!check || !isConnectedToTop(gs, pos, visCon))) {
             auto& tile = gs.board.things[pos.row][pos.col];
             if (tile.ref.exists) {
+                gs.score++;
                 removeTile(gs, pos);
                 addParticle(gs, gs.board.things[pos.row][pos.col].thing, getPixByPos(gs, pos), Vector2Zero());
                 for (auto& n : tile.neighs)
