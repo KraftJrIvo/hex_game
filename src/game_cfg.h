@@ -43,4 +43,5 @@
 #define TOGOI std::vector<int>{1, 0, 3, 2, 5, 4}
 #define TOGO std::vector<ThingPos>{{pos.row, pos.col + 1}, {pos.row, pos.col - 1}, {pos.row - 1, pos.col}, {pos.row + 1, pos.col}, {pos.row - 1, ((pos.row + gs.board.even) % 2) ? (pos.col + 1) : (pos.col - 1)}, {pos.row + 1, ((pos.row + gs.board.even) % 2) ? (pos.col + 1) : (pos.col - 1)}}
 #define UNFOCUS_TIMEOUT 0.1f
+#define REARM_TIMEOUT 0.25f
 #define N_TO_DROP 4

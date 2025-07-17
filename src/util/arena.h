@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstddef>
 #include <vector>
 
@@ -50,6 +51,17 @@ public:
 
     void clear() {
         _firstAvailableIdx = 0;
+    }
+
+    bool has(const T& obj) {
+        bool found = false;
+        for (int i = 0; i < count(); ++i) {
+            if (_data[i].row == obj.row && _data[i].col == obj.col) {
+                found = true;
+                break;
+            }
+        }
+        return found;
     }
 
 };

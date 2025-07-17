@@ -39,6 +39,11 @@ struct Gun {
     float speed;
     float dir = 0;
     Thing armed;
+    bool extraArmed = false;
+    bool firstSwap = true;
+    Thing extra;
+    bool nextArmed = false;
+    Thing next;
 };
 
 struct Particle {
@@ -60,6 +65,7 @@ struct Bullet {
     Vector2 rebCp, rebEnd;
     double rebTime;
     Arena<MAX_TODROP, ThingPos> todrop;
+    Arena<MAX_TODROP, ThingPos> uncon;
 };
 
 struct GameAssets {
@@ -80,6 +86,8 @@ struct GameState {
     double gameStartTime;
     double gameOverTime;
     double focusTime;
+    double rearmTime;
+    double swapTime;
 };
 
 #ifndef GAME_BASE_DLL
