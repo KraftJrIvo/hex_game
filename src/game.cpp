@@ -575,8 +575,12 @@ extern "C" {
                         shootAndRearm(gs);
                 }
 
-                if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && (GetMouseY() > GetScreenHeight() - TILE_RADIUS * 2.0f)))
-                    swapExtra(gs);
+#ifdef PLATFORM_ANDROID
+            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && (GetMouseY() > GetScreenHeight() - TILE_RADIUS * 2.0f))
+#else
+                if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))
+#endif
+                swapExtra(gs);
         
                 if (gs.board.moveTime > 0 && gs.board.pos < 0) {
                     gs.board.pos = gs.board.pos * (1.0f - easeOutQuad(1.0f - gs.board.moveTime/gs.board.totalMoveTime));
@@ -673,8 +677,8 @@ extern "C" {
         if (startCoeff < 1.0f) rearmCoeff = 1.0f;
         
         float gameOverCoeff = gs.gameOver ? easeOutQuad(std::clamp((GetTime() - gs.gameOverTime)/GAME_OVER_TIMEOUT, 0.0, 1.0)) : 0.0f;
-        DrawCircleV(gunPos + gameOverCoeff * Vector2{0, TILE_RADIUS * 3.0f}, TILE_RADIUS + 3, WHITE);
-        DrawCircleV(extraPos + gameOverCoeff * Vector2{-TILE_RADIUS * 3.0f, 0}, TILE_RADIUS + 3, DARKGRAY);
+        DrawCircleV(gunPos + gameOverCoeff * Vector2{0, TILE_RADIUS * 3.0f}, TILE_RADIUS + TILE_RADIUS * 0.2f, WHITE);
+        DrawCircleV(extraPos + gameOverCoeff * Vector2{-TILE_RADIUS * 3.0f, 0}, TILE_RADIUS + TILE_RADIUS * 0.2f, DARKGRAY);
 
         if (!gs.gameOver) {
 
@@ -709,7 +713,7 @@ extern "C" {
                         Vector2 tpos = getPixByPos(gs, {i, j});
                         float h = (GetScreenHeight() - 2 * TILE_RADIUS) - (tpos.y + TILE_RADIUS);
                         if (h < ROW_HEIGHT * 2) {
-                            DrawTexturePro(ga.tiles, {0.0f, 32.0f, 48.0f, 16.0f}, {tpos.x - TILE_RADIUS * 3, GetScreenHeight() - 2 * TILE_RADIUS - 4.0f * TILE_RADIUS / 16.0f, TILE_RADIUS * 6, TILE_RADIUS * 2}, {0, 0}, 0, WHITE);
+                            DrawTexturePro(ga.tiles, {0.0f, 32.0f, 48.0f, 16.0f}, {tpos.x - TILE_RADIUS * 3, GetScreenHeight() - 2 * TILE_RADIUS - 5.0f * TILE_RADIUS / 16.0f, TILE_RADIUS * 6, TILE_RADIUS * 2}, {0, 0}, 0, WHITE);
                             if (h < ROW_HEIGHT * 1) {
                                 DrawTexturePro(ga.tiles, {48.0f, 32.0f, 16.0f, 16.0f}, {tpos.x - TILE_RADIUS, GetScreenHeight() - 2 * TILE_RADIUS, TILE_RADIUS * 2, TILE_RADIUS * 2}, {0, 0}, 0, (int(floor(GetTime() * 10)) % 2 == 0) ? WHITE : BLANK);
                             }
@@ -725,10 +729,10 @@ extern "C" {
         ClearBackground(BLACK);
         if (IsWindowFocused()) {
             drawBoard(ga, gs);
-            drawParticles(ga, gs);
             if (gs.gameOver)
-                drawGameOver(ga, gs);
+            drawGameOver(ga, gs);
             drawBottom(ga, gs);
+            drawParticles(ga, gs);
             if (gs.bullet.exists)
                 drawBullet(ga, gs);
         }
