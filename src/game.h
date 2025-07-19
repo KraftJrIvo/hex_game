@@ -30,9 +30,12 @@ struct Board {
     float pos = 0;
     float speed = BOARD_SPEED;
     int nFulRowsTop = 0;
+    int nRowsGap = BOARD_EMP_BOT_ROW_GAP;
     std::array<std::array<Tile, BOARD_WIDTH>, BOARD_HEIGHT> things;
     bool even = false;
     double moveTime, totalMoveTime;
+    bool accEnabled = true;
+    bool velEnabled = true;
 };
 
 struct Gun {
@@ -83,11 +86,16 @@ struct GameState {
     int score = 0;
     bool firstShotFired = false;
     bool gameOver = false;
+    double time;
     double gameStartTime;
     double gameOverTime;
     double focusTime;
     double rearmTime;
     double swapTime;
+    struct Temp {
+        bool timeOffsetSet = false;
+        double timeOffset;
+    } tmp;
 };
 
 #ifndef GAME_BASE_DLL

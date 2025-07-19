@@ -27,6 +27,10 @@ extern "C" {
         return GetRandomValue(min, max);
     }
 
+    double getTime(const GameState& gs) {
+        return GetTime() + gs.tmp.timeOffset;
+    }
+
     bool checkBounds(const GameState& gs, const ThingPos& pos) {
         return (pos.row >= 0 && pos.row < BOARD_HEIGHT && pos.col >= 0 && pos.col < (((pos.row + gs.board.even) % 2) ? (BOARD_WIDTH - 1) : (BOARD_WIDTH)));
     }
@@ -54,7 +58,7 @@ extern "C" {
     Rectangle getBoardRect(const GameState& gs) {
         float bWidth = TILE_RADIUS * 2 * BOARD_WIDTH;
         float bHeight = ROW_HEIGHT * BOARD_HEIGHT;
-        float startCoeff = easeOutQuad(std::clamp((GetTime() - gs.gameStartTime)/GAME_START_TIME, 0.0, 1.0));
+        float startCoeff = easeOutQuad(std::clamp((getTime(gs) - gs.gameStartTime)/GAME_START_TIME, 0.0, 1.0));
         Vector2 bPos = {(GetScreenWidth() - bWidth) * 0.5f, (float)GetScreenHeight() - 2 * bHeight + bHeight * startCoeff + gs.board.pos};
         return {float(int(bPos.x)), float(int(bPos.y)), bWidth, bHeight};
     }
@@ -187,7 +191,7 @@ extern "C" {
             setNext(gs);
         gs.gun.armed = gs.gun.next;
         setNext(gs);
-        gs.rearmTime = GetTime();
+        gs.rearmTime = getTime(gs);
     }
 
     void swapExtra(GameState& gs) {
@@ -201,7 +205,7 @@ extern "C" {
             gs.gun.extraArmed = true;
             rearm(gs);
         }
-        gs.swapTime = GetTime();
+        gs.swapTime = getTime(gs);
     }
 
     void loadAssets(GameAssets& ga) {
@@ -216,13 +220,13 @@ extern "C" {
         
         gs.seed = rand() % std::numeric_limits<int>::max();
 
-        generateRows(gs, BOARD_HEIGHT - BOARD_EMP_BOT_ROW_GAP);
+        generateRows(gs, BOARD_HEIGHT - gs.board.nRowsGap);
 
         rearm(gs);
 
         float bHeight = ROW_HEIGHT * BOARD_HEIGHT;   
         
-        gs.gameStartTime = GetTime();
+        gs.gameStartTime = getTime(gs);
     }
 
     DLL_EXPORT void init(GameAssets& ga, GameState& gs)
@@ -347,7 +351,7 @@ extern "C" {
     }
 
     void checkLines(GameState& gs) {
-        auto extraRows = countBotEmpRows(gs) - BOARD_EMP_BOT_ROW_GAP;
+        auto extraRows = countBotEmpRows(gs) - gs.board.nRowsGap;
         if (extraRows > 0) {
             shiftBoard(gs, extraRows);
             generateRows(gs, extraRows);
@@ -393,7 +397,7 @@ extern "C" {
         gs.bullet.rebounce = 0.0f;
         gs.bullet.rebCp = (gs.bullet.pos - Vector2Normalize(gs.bullet.vel) * BULLET_REBOUNCE)- Vector2{0, gs.board.pos};
         gs.bullet.rebEnd = (getPixByPos(gs, gs.bullet.lstEmp)) - Vector2{0, gs.board.pos};
-        gs.bullet.rebTime = GetTime();
+        gs.bullet.rebTime = getTime(gs);
     }
 
     void doDrop(GameState& gs, const ThingPos& pos) {
@@ -426,7 +430,7 @@ extern "C" {
 
         if (gs.bullet.rebouncing) {
             gs.bullet.pos = GetSplinePointBezierQuad(gs.bullet.pos - Vector2{0, gs.board.pos}, gs.bullet.rebCp, gs.bullet.rebEnd, gs.bullet.rebounce) + Vector2{0, gs.board.pos};
-            float prog = (float)(GetTime() - gs.bullet.rebTime)/BULLET_REBOUNCE_TIME;
+            float prog = (float)(getTime(gs) - gs.bullet.rebTime)/BULLET_REBOUNCE_TIME;
             if (prog > 1.0f) {
                 gs.bullet.exists = false;
                 addTile(gs, gs.bullet.lstEmp, Tile{gs.bullet.thing, {true}});
@@ -477,7 +481,7 @@ extern "C" {
 
     void gameOver(GameState& gs) {
         gs.gameOver = true;
-        gs.gameOverTime = GetTime();
+        gs.gameOverTime = getTime(gs);
         gs.bullet.exists = false;
         Vector2 gunPos = {(float)GetScreenWidth() * 0.5f, (float)GetScreenHeight() - TILE_RADIUS};
         addParticle(gs, gs.gun.armed, gunPos, Vector2{50.0f * RAND_FLOAT_SIGNED, -400.0f - 100.0f * RAND_FLOAT});
@@ -489,7 +493,7 @@ extern "C" {
     void update(GameState& gs) 
     {
         if (gs.gameOver) {
-            if (GetTime() > gs.gameOverTime + GAME_OVER_TIMEOUT) {
+            if (getTime(gs) > gs.gameOverTime + GAME_OVER_TIMEOUT) {
 #ifdef PLATFORM_ANDROID
                 if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT))
 #else
@@ -497,7 +501,7 @@ extern "C" {
 #endif            
                 resetGame(gs);
             }
-        } else if (gs.gameStartTime + GAME_START_TIME < GetTime()) {
+        } else if (gs.gameStartTime + GAME_START_TIME < getTime(gs)) {
             auto delta = GetFrameTime() / UPDATE_ITS;
 
 #ifdef PLATFORM_ANDROID
@@ -525,13 +529,13 @@ extern "C" {
 
     void updateOnce(GameState& gs) 
     {   
-        if (gs.gameStartTime + GAME_START_TIME < GetTime()) {
+        if (gs.gameStartTime + GAME_START_TIME < getTime(gs)) {
             if (gs.gameOver) {
                 for (int i = 0; i < BOARD_HEIGHT; ++i) {
                     for (int j = 0; j < BOARD_WIDTH - ((i + gs.board.even) % 2); ++j) {
                         const Tile& tile = gs.board.things[i][j];
                         if (tile.ref.exists) {
-                            if ((GetTime() - gs.gameOverTime) > (GAME_OVER_TIME_PER_ROW * (BOARD_HEIGHT - 1 - i))) {
+                            if ((getTime(gs) - gs.gameOverTime) > (GAME_OVER_TIME_PER_ROW * (BOARD_HEIGHT - 1 - i))) {
                                 gs.board.things[i][j].ref.exists = false;
                                 Vector2 tpos = getPixByPos(gs, {i, j});
                                 if (tpos.y > 0)
@@ -574,13 +578,15 @@ extern "C" {
             #endif
                         shootAndRearm(gs);
                 }
-
+                
+                static int touchCount = 0;                
 #ifdef PLATFORM_ANDROID
-            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && (GetMouseY() > GetScreenHeight() - TILE_RADIUS * 2.0f))
+                if ((GetTouchPointCount() == 2 && touchCount == 1) || (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && GetMouseY() > GetScreenHeight() - TILE_RADIUS * 2.0f))
 #else
-                if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))
+                if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && GetMouseY() > GetScreenHeight() - TILE_RADIUS * 2.0f))
 #endif
-                swapExtra(gs);
+                    swapExtra(gs);
+                touchCount = GetTouchPointCount();
         
                 if (gs.board.moveTime > 0 && gs.board.pos < 0) {
                     gs.board.pos = gs.board.pos * (1.0f - easeOutQuad(1.0f - gs.board.moveTime/gs.board.totalMoveTime));
@@ -595,8 +601,18 @@ extern "C" {
             flyParticles(gs, GetFrameTime());
 
             if (gs.firstShotFired) {
-                gs.board.pos += TILE_RADIUS / 16.0f * gs.board.speed * GetFrameTime();
-                gs.board.speed += BOARD_ACC * GetFrameTime();
+                if (gs.board.velEnabled) gs.board.pos += TILE_RADIUS / 16.0f * gs.board.speed * GetFrameTime();
+                if (gs.board.accEnabled) gs.board.speed += BOARD_ACC * GetFrameTime();
+            }
+
+            if (IsKeyPressed(KEY_Z)) {
+                if (gs.board.accEnabled) {
+                    gs.board.accEnabled = false;
+                } else {
+                    gs.board.velEnabled = false;
+                    gs.board.nRowsGap = 5;
+                    checkLines(gs);
+                }
             }
         }
     }
@@ -629,7 +645,7 @@ extern "C" {
                 if (tile.ref.exists) {
                     Vector2 tpos = getPixByPos(gs, {i, j});
                     Vector2 shake = gs.gameOver ?
-                        SHAKE_STR * RAND_FLOAT_SIGNED_2D * std::clamp((GetTime() - gs.gameOverTime)/std::max((GAME_OVER_TIME_PER_ROW * (BOARD_HEIGHT - 1 - i)), 0.001f), 0.0, 1.0) :
+                        SHAKE_STR * RAND_FLOAT_SIGNED_2D * std::clamp((getTime(gs) - gs.gameOverTime)/std::max((GAME_OVER_TIME_PER_ROW * (BOARD_HEIGHT - 1 - i)), 0.001f), 0.0, 1.0) :
                         RAND_FLOAT_SIGNED_2D * tile.shake * SHAKE_STR;
                     drawThing(ga, gs, tpos + shake, tile.thing);
                 }
@@ -650,9 +666,9 @@ extern "C" {
     }
 
     void drawGameOver(const GameAssets& ga, const GameState& gs) {
-        float coeff = easeOutBounce(1.0f - std::clamp((gs.gameOverTime + GAME_OVER_TIMEOUT - GetTime())/GAME_OVER_TIMEOUT_BEF, 0.0, 1.0));
-        DrawTexturePro(ga.tiles, {(int(floor(GetTime() * 10)) % 2 == 0) ? 80.0f : 96.0f, 32.0f, 16.0f, 16.0f}, {GetScreenWidth() * 0.5f - TILE_RADIUS, GetScreenHeight() * -0.25f - TILE_RADIUS + coeff * GetScreenHeight() * 0.5f, TILE_RADIUS * 2, TILE_RADIUS * 2}, {0, 0}, 0, WHITE);
-        auto scorestr = std::to_string(gs.score);
+        float coeff = easeOutBounce(1.0f - std::clamp((gs.gameOverTime + GAME_OVER_TIMEOUT - getTime(gs))/GAME_OVER_TIMEOUT_BEF, 0.0, 1.0));
+        DrawTexturePro(ga.tiles, {(int(floor(getTime(gs) * 10)) % 2 == 0) ? 80.0f : 96.0f, 32.0f, 16.0f, 16.0f}, {GetScreenWidth() * 0.5f - TILE_RADIUS, GetScreenHeight() * -0.25f - TILE_RADIUS + coeff * GetScreenHeight() * 0.5f, TILE_RADIUS * 2, TILE_RADIUS * 2}, {0, 0}, 0, WHITE);
+        auto scorestr = gs.board.accEnabled ? std::to_string(gs.score) : ("\"" + std::to_string(gs.score) + "\"");
         auto sz = ga.font.baseSize * floor(TILE_RADIUS * 2 / ga.font.baseSize);
         auto meas = MeasureTextEx(ga.font, scorestr.c_str(), sz, 1.0);
         auto txtPos1prv = Vector2{TILE_RADIUS * 2.0f + (GetScreenWidth() - TILE_RADIUS * 6.0f) * 0.25f - meas.x * 0.5f, GetScreenHeight() - TILE_RADIUS - meas.y * 0.5f};
@@ -666,23 +682,23 @@ extern "C" {
 
     void drawBottom(const GameAssets& ga, const GameState& gs) 
     {
-        float startCoeff = easeOutQuad(std::clamp((GetTime() - gs.gameStartTime)/GAME_START_TIME, 0.0, 1.0));
+        float startCoeff = easeOutQuad(std::clamp((getTime(gs) - gs.gameStartTime)/GAME_START_TIME, 0.0, 1.0));
 
         Vector2 nextNextPos = {GetScreenWidth() - TILE_RADIUS + TILE_RADIUS  * 2.0f, GetScreenHeight() - TILE_RADIUS};
         Vector2 nextPos = {GetScreenWidth() + TILE_RADIUS - startCoeff * 2 * TILE_RADIUS, GetScreenHeight() - TILE_RADIUS};
         Vector2 gunPos = {(float)GetScreenWidth() * 0.5f, (float)GetScreenHeight() + TILE_RADIUS - startCoeff * 2 * TILE_RADIUS};
         Vector2 extraPos = {-2.0f * TILE_RADIUS + startCoeff * 3.0f * TILE_RADIUS, GetScreenHeight() - TILE_RADIUS};
-        float rearmCoeff = easeOutQuad(std::clamp((GetTime() - gs.rearmTime)/REARM_TIMEOUT, 0.0, 1.0));
-        float swapCoeff = easeOutQuad(std::clamp((GetTime() - gs.swapTime)/REARM_TIMEOUT, 0.0, 1.0));
+        float rearmCoeff = easeOutQuad(std::clamp((getTime(gs) - gs.rearmTime)/REARM_TIMEOUT, 0.0, 1.0));
+        float swapCoeff = easeOutQuad(std::clamp((getTime(gs) - gs.swapTime)/REARM_TIMEOUT, 0.0, 1.0));
         if (startCoeff < 1.0f) rearmCoeff = 1.0f;
         
-        float gameOverCoeff = gs.gameOver ? easeOutQuad(std::clamp((GetTime() - gs.gameOverTime)/GAME_OVER_TIMEOUT, 0.0, 1.0)) : 0.0f;
+        float gameOverCoeff = gs.gameOver ? easeOutQuad(std::clamp((getTime(gs) - gs.gameOverTime)/GAME_OVER_TIMEOUT, 0.0, 1.0)) : 0.0f;
         DrawCircleV(gunPos + gameOverCoeff * Vector2{0, TILE_RADIUS * 3.0f}, TILE_RADIUS + TILE_RADIUS * 0.2f, WHITE);
         DrawCircleV(extraPos + gameOverCoeff * Vector2{-TILE_RADIUS * 3.0f, 0}, TILE_RADIUS + TILE_RADIUS * 0.2f, DARKGRAY);
 
         if (!gs.gameOver) {
 
-            if (gs.gameStartTime + GAME_START_TIME < GetTime()) {
+            if (gs.gameStartTime + GAME_START_TIME < getTime(gs)) {
                 const int NTICKS = 50;
                 const float TICKSTEP = TILE_RADIUS * 2;
                 Vector2 pos = gunPos;
@@ -700,7 +716,7 @@ extern "C" {
 
             if (gs.gun.extraArmed)
                 drawThing(ga, gs, gunPos + (extraPos - gunPos) * swapCoeff, gs.gun.extra);
-            auto scorestr = std::to_string(gs.score);
+            auto scorestr = gs.board.accEnabled ? std::to_string(gs.score) : ("\"" + std::to_string(gs.score) + "\"");
             auto sz = ga.font.baseSize * floor(TILE_RADIUS * 2 / ga.font.baseSize);
             auto meas = MeasureTextEx(ga.font, scorestr.c_str(), sz, 1.0);
             DrawTextEx(ga.font, scorestr.c_str(), {TILE_RADIUS * 2.0f + (GetScreenWidth() - TILE_RADIUS * 6.0f) * 0.25f - meas.x * 0.5f - (1.0f - startCoeff) * TILE_RADIUS * 2.0f, GetScreenHeight() - TILE_RADIUS - meas.y * 0.5f + (1.0f - startCoeff) * TILE_RADIUS * 2.0f}, sz, 1.0, GRAY);
@@ -715,7 +731,7 @@ extern "C" {
                         if (h < ROW_HEIGHT * 2) {
                             DrawTexturePro(ga.tiles, {0.0f, 32.0f, 48.0f, 16.0f}, {tpos.x - TILE_RADIUS * 3, GetScreenHeight() - 2 * TILE_RADIUS - 5.0f * TILE_RADIUS / 16.0f, TILE_RADIUS * 6, TILE_RADIUS * 2}, {0, 0}, 0, WHITE);
                             if (h < ROW_HEIGHT * 1) {
-                                DrawTexturePro(ga.tiles, {48.0f, 32.0f, 16.0f, 16.0f}, {tpos.x - TILE_RADIUS, GetScreenHeight() - 2 * TILE_RADIUS, TILE_RADIUS * 2, TILE_RADIUS * 2}, {0, 0}, 0, (int(floor(GetTime() * 10)) % 2 == 0) ? WHITE : BLANK);
+                                DrawTexturePro(ga.tiles, {48.0f, 32.0f, 16.0f, 16.0f}, {tpos.x - TILE_RADIUS, GetScreenHeight() - 2 * TILE_RADIUS, TILE_RADIUS * 2, TILE_RADIUS * 2}, {0, 0}, 0, (int(floor(getTime(gs) * 10)) % 2 == 0) ? WHITE : BLANK);
                             }
                         }
                     }
@@ -730,7 +746,7 @@ extern "C" {
         if (IsWindowFocused()) {
             drawBoard(ga, gs);
             if (gs.gameOver)
-            drawGameOver(ga, gs);
+                drawGameOver(ga, gs);
             drawBottom(ga, gs);
             drawParticles(ga, gs);
             if (gs.bullet.exists)
@@ -741,16 +757,16 @@ extern "C" {
 
     DLL_EXPORT void updateAndDraw(const GameAssets& ga, GameState& gs) 
     {
-        if (gs.gameStartTime > GetTime()) {
-            gs.gameStartTime = GetTime() - GAME_START_TIME;
-            gs.focusTime = GetTime() - UNFOCUS_TIMEOUT;
-            gs.rearmTime = GetTime() - REARM_TIMEOUT;
-            gs.swapTime = GetTime() - REARM_TIMEOUT;
+        if (!gs.tmp.timeOffsetSet) {
+            if (gs.time == 0) gs.time = GetTime();
+            gs.tmp.timeOffset = gs.time - GetTime();
+            gs.tmp.timeOffsetSet = true;
         }
+        
         if (IsWindowFocused()) {
             if (gs.focusTime == 0)
-                gs.focusTime = GetTime();
-            if (GetTime() - gs.focusTime > UNFOCUS_TIMEOUT) {
+                gs.focusTime = getTime(gs);
+            if (getTime(gs) - gs.focusTime > UNFOCUS_TIMEOUT && GetFrameTime() < 1.0) {
                 for (int i = 0; i < UPDATE_ITS; ++i)
                     update(gs);
                 updateOnce(gs);
@@ -760,6 +776,8 @@ extern "C" {
         }
 
         draw(ga, gs);
+
+        gs.time = GetTime();
     }
 
 } // extern "C"
