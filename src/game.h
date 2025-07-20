@@ -34,8 +34,6 @@ struct Board {
     std::array<std::array<Tile, BOARD_WIDTH>, BOARD_HEIGHT> things;
     bool even = false;
     double moveTime, totalMoveTime;
-    bool accEnabled = true;
-    bool velEnabled = true;
 };
 
 struct Gun {
@@ -74,25 +72,37 @@ struct Bullet {
 struct GameAssets {
     Texture2D tiles;
     Font font;
+    Music music;
 };
 
 struct GameState {
     unsigned int seed;
     Board board;
     Gun gun;
-    Arena<MAX_PARTICLES, Particle> particles;
     Bullet bullet;
-    int n_params = 2;
     int score = 0;
     bool firstShotFired = false;
     bool gameOver = false;
     double time;
     double gameStartTime;
     double gameOverTime;
-    double focusTime;
+    double inputTimeoutTime;
     double rearmTime;
     double swapTime;
+    bool musicLoopDone = false;
+    bool settingsOpened = false;
+    bool alteredDifficulty = false;
+    struct UserData {
+        int bestScore = 0;
+        int n_params = 2;
+        bool musEnabled = true;
+        bool sndEnabled = true;
+        bool accEnabled = true;
+        bool velEnabled = true;
+        bool operator==(const UserData&) const = default;
+    } usr;
     struct Temp {
+        Arena<MAX_PARTICLES, Particle> particles;
         bool timeOffsetSet = false;
         double timeOffset;
     } tmp;
@@ -101,6 +111,8 @@ struct GameState {
 #ifndef GAME_BASE_DLL
 extern "C" {
     void init(GameAssets& ga, GameState& gs);
+    void loadUserData(GameState& gs);
+    void saveUserData(const GameState& gs);
     void updateAndDraw(const GameAssets& ga, GameState& gs);
 }
 #endif

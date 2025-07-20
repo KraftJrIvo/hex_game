@@ -20,12 +20,14 @@ project(HEX_GAME VERSION 0.0.1 DESCRIPTION "raylib game base" LANGUAGES CXX C)
 add_executable(embedfile "src/util/embedfile.c")
 add_custom_command(OUTPUT res_tiles.c COMMAND embedfile res_tiles ${HEX_GAME_SOURCE_DIR}/res/tiles.png DEPENDS ${HEX_GAME_SOURCE_DIR}/res/tiles.png)
 add_custom_command(OUTPUT res_font.c COMMAND embedfile res_font ${HEX_GAME_SOURCE_DIR}/res/cozette.otf DEPENDS ${HEX_GAME_SOURCE_DIR}/res/cozette.otf)
+add_custom_command(OUTPUT res_music.c COMMAND embedfile res_music ${HEX_GAME_SOURCE_DIR}/res/music.ogg DEPENDS ${HEX_GAME_SOURCE_DIR}/res/music.ogg)
 
 # TARGET
 set(GAME_SOURCE_FILES    
   "src/game.cpp"
   res_tiles.c
   res_font.c
+  res_music.c
 )
 if (GAME_BASE_SHARED_BUILD)
   add_library(GAME_NEW SHARED ${GAME_SOURCE_FILES})

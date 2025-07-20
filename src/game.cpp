@@ -8,11 +8,14 @@
 #include <algorithm>
 #include <map>
 #include <string>
+#include <vector>
 
 extern "C" const unsigned char res_tiles[];
 extern "C" const size_t        res_tiles_len;
 extern "C" const unsigned char res_font[];
 extern "C" const size_t        res_font_len;
+extern "C" const unsigned char res_music[];
+extern "C" const size_t        res_music_len;
 
 #if (defined(_WIN32) || defined(_WIN64)) && defined(GAME_BASE_DLL)
 #define DLL_EXPORT __declspec(dllexport)
@@ -137,7 +140,7 @@ extern "C" {
     }
 
     void addParticle(GameState& gs, const Thing& thing, Vector2 pos, Vector2 vel) {
-        gs.particles.acquire(Particle{true, thing, pos, vel});
+        gs.tmp.particles.acquire(Particle{true, thing, pos, vel});
     }
 
     void generateRows(GameState& gs, int n) {
@@ -213,10 +216,26 @@ extern "C" {
         char8_t _allChars[228] = u8" !\"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ";
         int c; auto cdpts = LoadCodepoints((const char*)_allChars, &c);
         ga.font = LoadFontFromMemory(".ttf", res_font, res_font_len, 39, cdpts, c);
+        InitAudioDevice();
+        ga.music = LoadMusicStreamFromMemory(".ogg", res_music, res_music_len);
+    }
+
+    DLL_EXPORT void saveUserData(const GameState& gs) {
+        SaveFileData("userdata", (void*)&gs.usr, sizeof(GameState::UserData));
+    }
+
+    DLL_EXPORT void loadUserData(GameState& gs) {
+        int sz = sizeof(GameState::UserData);
+        std::vector<unsigned char> buffer(sz);
+        int datasz;
+        unsigned char* ptr = LoadFileData("userdata", &datasz);
+        if (ptr && datasz == sz)
+            gs.usr = *((GameState::UserData*)ptr);
     }
 
     void resetGame(GameState& gs) {
         gs = GameState{0};
+        loadUserData(gs);
         
         gs.seed = rand() % std::numeric_limits<int>::max();
 
@@ -233,6 +252,8 @@ extern "C" {
     {
         loadAssets(ga);
         resetGame(gs);
+        loadUserData(gs);
+        PlayMusicStream(ga.music);
     }
 
     void shootAndRearm(GameState& gs) {
@@ -364,7 +385,7 @@ extern "C" {
         int bestK = 0, bestScore = 0;
         Arena<MAX_TODROP, ThingPos> todrops[3];
         Arena<MAX_TODROP, ThingPos> uncons[3];
-        for (int k = 0; k < gs.n_params; ++k) {
+        for (int k = 0; k < gs.usr.n_params; ++k) {
             std::map<int, std::map<int, bool>> vis;
             checkDropRecur(gs, gs.bullet.lstEmp, gs.bullet.thing, k, todrops[k], vis);
             if (todrops[k].count() >= N_TO_DROP - 1) {
@@ -466,8 +487,8 @@ extern "C" {
 
     void flyParticles(GameState& gs, float delta) {
         bool someInFrame = false;
-        for (int i = 0; i < gs.particles.count(); ++i) {
-            auto& prt = gs.particles.at(i);
+        for (int i = 0; i < gs.tmp.particles.count(); ++i) {
+            auto& prt = gs.tmp.particles.at(i);
             if (prt.exists) {
                 prt.pos += prt.vel * delta;
                 prt.vel += GRAVITY * Vector2{0.0f, 1.0f} * delta;
@@ -476,7 +497,7 @@ extern "C" {
             }
         }
         if (!someInFrame)
-            gs.particles.clear();
+            gs.tmp.particles.clear();
     }
 
     void gameOver(GameState& gs) {
@@ -488,6 +509,10 @@ extern "C" {
         addParticle(gs, gs.gun.next, {GetScreenWidth() - TILE_RADIUS, GetScreenHeight() - TILE_RADIUS}, Vector2{50.0f * RAND_FLOAT_SIGNED, -400.0f - 100.0f * RAND_FLOAT});
         if (gs.gun.extraArmed)
             addParticle(gs, gs.gun.extra, {TILE_RADIUS, GetScreenHeight() - TILE_RADIUS}, Vector2{50.0f * RAND_FLOAT_SIGNED, -400.0f - 100.0f * RAND_FLOAT});
+        if (gs.score > gs.usr.bestScore) {
+            gs.usr.bestScore = gs.score;
+            saveUserData(gs);
+        }
     }
 
     void update(GameState& gs) 
@@ -527,7 +552,7 @@ extern "C" {
         }
     }
 
-    void updateOnce(GameState& gs) 
+    void updateOnce(const GameAssets& ga, GameState& gs) 
     {   
         if (gs.gameStartTime + GAME_START_TIME < getTime(gs)) {
             if (gs.gameOver) {
@@ -594,45 +619,73 @@ extern "C" {
                 }
 
                 if (IsKeyPressed(KEY_Q))
-                    gs.n_params = (gs.n_params % 3) + 1;
+                    gs.usr.n_params = (gs.usr.n_params % 3) + 1;
 
             }
 
             flyParticles(gs, GetFrameTime());
 
             if (gs.firstShotFired) {
-                if (gs.board.velEnabled) gs.board.pos += TILE_RADIUS / 16.0f * gs.board.speed * GetFrameTime();
-                if (gs.board.accEnabled) gs.board.speed += BOARD_ACC * GetFrameTime();
+                if (gs.usr.velEnabled) 
+                    gs.board.pos += TILE_PIXEL * (gs.usr.accEnabled ? gs.board.speed : BOARD_CONST_SPEED) * GetFrameTime();
+                if (gs.usr.accEnabled) 
+                    gs.board.speed += BOARD_ACC * GetFrameTime();
             }
 
             if (IsKeyPressed(KEY_Z)) {
-                if (gs.board.accEnabled) {
-                    gs.board.accEnabled = false;
-                } else {
-                    gs.board.velEnabled = false;
-                    gs.board.nRowsGap = 5;
-                    checkLines(gs);
-                }
+                if (gs.usr.accEnabled)
+                    gs.usr.accEnabled = false;
+                else
+                    gs.usr.velEnabled = false;
             }
         }
     }
 
-    void drawThing(const GameAssets& ga, const GameState& gs, Vector2 pos, const Thing& thing) {
-        //DrawCircle(pos.x, pos.y, TILE_RADIUS, COLORS[thing.clr]);
+    void updateMusic(const GameAssets& ga, GameState& gs) {
+        if (gs.usr.musEnabled) {
+            UpdateMusicStream(ga.music);
+            auto musicLen = GetMusicTimeLength(ga.music);
+            auto musicTimePlayed = GetMusicTimePlayed(ga.music);
+            //if (gs.musicLoopDone && musicTimePlayed < musicLen * 0.5f)
+            //    SeekMusicStream(ga.music, musicLen * 0.5f + musicTimePlayed);
+            //if (!gs.musicLoopDone && musicTimePlayed > musicLen * 0.5f)
+            //    gs.musicLoopDone = true;
+        }
+    }
+
+    float getTextSize(const GameAssets& ga) {
+        auto sz = ga.font.baseSize * floor(TILE_RADIUS * 2 / ga.font.baseSize);
+        return sz;
+    }
+
+    void drawText(const GameAssets& ga, const std::string txt, Vector2 pos, Color col = WHITE) {
         pos = {(float)int(pos.x), (float)int(pos.y)};
-        if (gs.n_params == 1)
-            DrawTexturePro(ga.tiles, {0.0f, 0.0f, 16.0f, 17.0f}, {pos.x - TILE_RADIUS, pos.y - TILE_RADIUS, TILE_RADIUS * 2, TILE_RADIUS * 2 + TILE_RADIUS * 2.0f/17.0f}, {0, 0}, 0, COLORS[thing.clr]);
-        else if (gs.n_params >= 2)
-            DrawTexturePro(ga.tiles, {16.0f * thing.shp, 0.0f, 16.0f, 17.0f}, {pos.x - TILE_RADIUS, pos.y - TILE_RADIUS, TILE_RADIUS * 2, TILE_RADIUS * 2 + TILE_RADIUS * 2.0f/16.0f}, {0, 0}, 0, COLORS[thing.clr]);
-        if (gs.n_params >= 3)
-            DrawTexturePro(ga.tiles, {16.0f * thing.sym, 16.0f, 16.0f, 16.0f}, {pos.x - TILE_RADIUS, pos.y - TILE_RADIUS, TILE_RADIUS * 2, TILE_RADIUS * 2}, {0, 0}, 0, COLORS[thing.clr]);
+        auto pos2 = Vector2{pos.x, (float)int(pos.y + ceil(TILE_PIXEL))};
+        auto sz = getTextSize(ga);
+        Color darkol = Color{uint8_t(col.r * 0.6f), uint8_t(col.g * 0.6f), uint8_t(col.b * 0.6f), 255};
+        DrawTextEx(ga.font, txt.c_str(), pos2, sz, 1.0, darkol);
+        DrawTextEx(ga.font, txt.c_str(), pos, sz, 1.0, col);
+    }
+
+    void drawTile(const GameAssets& ga, const ThingPos& tpos, Vector2 pos, Color col = WHITE, Vector2 sz = {TILE_SIZE, TILE_SIZE}) {
+        pos = {(float)int(pos.x - sz.x * TILE_PIXEL * 0.5f), (float)int(pos.y - sz.y * TILE_PIXEL * 0.5f)};
+        DrawTexturePro(ga.tiles, {tpos.col * TILE_SIZE, tpos.row * TILE_SIZE, sz.x, sz.y}, {pos.x, pos.y, sz.x * TILE_PIXEL, sz.y * TILE_PIXEL}, {0, 0}, 0, col);
+    }
+
+    void drawThing(const GameAssets& ga, const GameState& gs, Vector2 pos, const Thing& thing) {
+        if (gs.usr.n_params == 1)
+            drawTile(ga, {0, 0}, pos, COLORS[thing.clr], {TILE_SIZE, TILE_SIZE + 1.0f});
+        else if (gs.usr.n_params >= 2)
+            drawTile(ga, {0, thing.shp}, pos, COLORS[thing.clr], {TILE_SIZE, TILE_SIZE + 1.0f});
+        if (gs.usr.n_params >= 3)
+            drawTile(ga, {0, thing.sym}, pos, COLORS[thing.clr]);
         //for (auto& n : thing.neighs)
         //    if (n.exists) DrawLineV(pos, (getPixByPos(gs, n.pos) + pos) * 0.5, WHITE);
     }
 
     void drawParticles(const GameAssets& ga, const GameState& gs) {
-        for (int i = gs.particles.count() - 1; i >= 0; --i) {
-            auto& prt = gs.particles.get(i);
+        for (int i = gs.tmp.particles.count() - 1; i >= 0; --i) {
+            auto& prt = gs.tmp.particles.get(i);
             if (prt.exists)
                 drawThing(ga, gs, prt.pos, prt.thing);
         }
@@ -667,17 +720,22 @@ extern "C" {
 
     void drawGameOver(const GameAssets& ga, const GameState& gs) {
         float coeff = easeOutBounce(1.0f - std::clamp((gs.gameOverTime + GAME_OVER_TIMEOUT - getTime(gs))/GAME_OVER_TIMEOUT_BEF, 0.0, 1.0));
-        DrawTexturePro(ga.tiles, {(int(floor(getTime(gs) * 10)) % 2 == 0) ? 80.0f : 96.0f, 32.0f, 16.0f, 16.0f}, {GetScreenWidth() * 0.5f - TILE_RADIUS, GetScreenHeight() * -0.25f - TILE_RADIUS + coeff * GetScreenHeight() * 0.5f, TILE_RADIUS * 2, TILE_RADIUS * 2}, {0, 0}, 0, WHITE);
-        auto scorestr = gs.board.accEnabled ? std::to_string(gs.score) : ("\"" + std::to_string(gs.score) + "\"");
-        auto sz = ga.font.baseSize * floor(TILE_RADIUS * 2 / ga.font.baseSize);
+        Vector2 skulpos = {GetScreenWidth() * 0.5f, GetScreenHeight() * -0.25f + coeff * GetScreenHeight() * 0.5f};
+        drawTile(ga, {2, ((int(floor(getTime(gs) * 10)) % 2 == 0) ? 5 : ((gs.score == 0) ? 8 : ((gs.usr.bestScore == gs.score) ? 7 : 6)))}, skulpos);
+        auto verdictstr = (gs.usr.bestScore == gs.score) ? ((gs.usr.bestScore > 0) ? std::string("NEW RECORD!") : std::string("Really now???")) : ("Best: " + std::to_string(gs.usr.bestScore));
+        auto sz = getTextSize(ga);
+        auto vmeas = MeasureTextEx(ga.font, verdictstr.c_str(), sz, 1.0);
+        drawText(ga, verdictstr, skulpos + Vector2{-vmeas.x * 0.5f, TILE_RADIUS * 3.0f - vmeas.y * 0.5f}, WHITE);
+
+        auto scorestr = gs.alteredDifficulty ? ("\"" + std::to_string(gs.score) + "\"") : std::to_string(gs.score);
         auto meas = MeasureTextEx(ga.font, scorestr.c_str(), sz, 1.0);
         auto txtPos1prv = Vector2{TILE_RADIUS * 2.0f + (GetScreenWidth() - TILE_RADIUS * 6.0f) * 0.25f - meas.x * 0.5f, GetScreenHeight() - TILE_RADIUS - meas.y * 0.5f};
         auto txtPos2prv = Vector2{GetScreenWidth() - TILE_RADIUS * 2.0f - (GetScreenWidth() - TILE_RADIUS * 6.0f) * 0.25f - meas.x * 0.5f, GetScreenHeight() - TILE_RADIUS - meas.y * 0.5f};
         auto txtPosnew = Vector2{GetScreenWidth() * 0.5f - meas.x * 0.5f, GetScreenHeight() * 0.5f - meas.y * 0.5f};
 
-        DrawTextEx(ga.font, scorestr.c_str(), txtPos1prv + (txtPosnew - txtPos1prv) * coeff, sz, 1.0, PINK);
-        DrawTextEx(ga.font, scorestr.c_str(), txtPos2prv + (txtPosnew - txtPos2prv) * coeff, sz, 1.0, PINK);
-        DrawTexturePro(ga.tiles, {64.0f, 32.0f, 16.0f, 16.0f}, {GetScreenWidth() * 0.5f - TILE_RADIUS, GetScreenHeight() * 1.25f - TILE_RADIUS - coeff * GetScreenHeight() * 0.5f, TILE_RADIUS * 2, TILE_RADIUS * 2}, {0, 0}, 0, WHITE);
+        drawText(ga, scorestr, txtPos1prv + (txtPosnew - txtPos1prv) * coeff, PINK);
+        drawText(ga, scorestr, txtPos2prv + (txtPosnew - txtPos2prv) * coeff, PINK);
+        drawTile(ga, {2, 4}, {GetScreenWidth() * 0.5f, GetScreenHeight() * 1.25f - coeff * GetScreenHeight() * 0.5f}, WHITE, {TILE_SIZE, TILE_SIZE + 1});
     }
 
     void drawBottom(const GameAssets& ga, const GameState& gs) 
@@ -716,11 +774,10 @@ extern "C" {
 
             if (gs.gun.extraArmed)
                 drawThing(ga, gs, gunPos + (extraPos - gunPos) * swapCoeff, gs.gun.extra);
-            auto scorestr = gs.board.accEnabled ? std::to_string(gs.score) : ("\"" + std::to_string(gs.score) + "\"");
-            auto sz = ga.font.baseSize * floor(TILE_RADIUS * 2 / ga.font.baseSize);
-            auto meas = MeasureTextEx(ga.font, scorestr.c_str(), sz, 1.0);
-            DrawTextEx(ga.font, scorestr.c_str(), {TILE_RADIUS * 2.0f + (GetScreenWidth() - TILE_RADIUS * 6.0f) * 0.25f - meas.x * 0.5f - (1.0f - startCoeff) * TILE_RADIUS * 2.0f, GetScreenHeight() - TILE_RADIUS - meas.y * 0.5f + (1.0f - startCoeff) * TILE_RADIUS * 2.0f}, sz, 1.0, GRAY);
-            DrawTextEx(ga.font, scorestr.c_str(), {GetScreenWidth() - TILE_RADIUS * 2.0f - (GetScreenWidth() - TILE_RADIUS * 6.0f) * 0.25f - meas.x * 0.5f + (1.0f - startCoeff) * TILE_RADIUS * 2.0f, GetScreenHeight() - TILE_RADIUS - meas.y * 0.5f + (1.0f - startCoeff) * TILE_RADIUS * 2.0f}, sz, 1.0, GRAY);
+            auto scorestr = gs.alteredDifficulty ? ("\"" + std::to_string(gs.score) + "\"") : std::to_string(gs.score);
+            auto meas = MeasureTextEx(ga.font, scorestr.c_str(), getTextSize(ga), 1.0);
+            drawText(ga, scorestr, {TILE_RADIUS * 2.0f + (GetScreenWidth() - TILE_RADIUS * 6.0f) * 0.25f - meas.x * 0.5f - (1.0f - startCoeff) * TILE_RADIUS * 2.0f, GetScreenHeight() - TILE_RADIUS - meas.y * 0.5f + (1.0f - startCoeff) * TILE_RADIUS * 2.0f}, GRAY);
+            drawText(ga, scorestr, {GetScreenWidth() - TILE_RADIUS * 2.0f - (GetScreenWidth() - TILE_RADIUS * 6.0f) * 0.25f - meas.x * 0.5f + (1.0f - startCoeff) * TILE_RADIUS * 2.0f, GetScreenHeight() - TILE_RADIUS - meas.y * 0.5f + (1.0f - startCoeff) * TILE_RADIUS * 2.0f}, GRAY);
 
             for (int i = 0; i < BOARD_HEIGHT; ++i) {
                 for (int j = 0; j < BOARD_WIDTH - ((i + gs.board.even) % 2); ++j) {
@@ -729,10 +786,9 @@ extern "C" {
                         Vector2 tpos = getPixByPos(gs, {i, j});
                         float h = (GetScreenHeight() - 2 * TILE_RADIUS) - (tpos.y + TILE_RADIUS);
                         if (h < ROW_HEIGHT * 2) {
-                            DrawTexturePro(ga.tiles, {0.0f, 32.0f, 48.0f, 16.0f}, {tpos.x - TILE_RADIUS * 3, GetScreenHeight() - 2 * TILE_RADIUS - 5.0f * TILE_RADIUS / 16.0f, TILE_RADIUS * 6, TILE_RADIUS * 2}, {0, 0}, 0, WHITE);
-                            if (h < ROW_HEIGHT * 1) {
-                                DrawTexturePro(ga.tiles, {48.0f, 32.0f, 16.0f, 16.0f}, {tpos.x - TILE_RADIUS, GetScreenHeight() - 2 * TILE_RADIUS, TILE_RADIUS * 2, TILE_RADIUS * 2}, {0, 0}, 0, (int(floor(getTime(gs) * 10)) % 2 == 0) ? WHITE : BLANK);
-                            }
+                            drawTile(ga, {2, 0}, {tpos.x, GetScreenHeight() - TILE_RADIUS - 3.0f * TILE_PIXEL}, WHITE, {3 * TILE_SIZE, TILE_SIZE});
+                            if (h < ROW_HEIGHT * 1)
+                                drawTile(ga, {2, 3}, {tpos.x, GetScreenHeight() - TILE_RADIUS}, (int(floor(getTime(gs) * 10)) % 2 == 0) ? WHITE : BLANK);
                         }
                     }
                 }
@@ -740,9 +796,18 @@ extern "C" {
         }
     }
 
+    void updateSettingsButton(const GameAssets& ga, GameState& gs) {
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && Vector2DistanceSqr({(float)GetScreenWidth(), 0.0f}, GetMousePosition()) < TILE_RADIUS * TILE_RADIUS * 4) {
+            gs.settingsOpened = !gs.settingsOpened;
+            gs.inputTimeoutTime = getTime(gs);
+        }
+    }
+
+    void drawSettingsButton(const GameAssets& ga, const GameState& gs) {
+        drawTile(ga, {3, (gs.settingsOpened ? 7 : 6)}, {GetScreenWidth() - TILE_RADIUS, TILE_RADIUS});
+    }
+
     void draw(const GameAssets& ga, const GameState& gs) {        
-        BeginDrawing();
-        ClearBackground(BLACK);
         if (IsWindowFocused()) {
             drawBoard(ga, gs);
             if (gs.gameOver)
@@ -752,7 +817,51 @@ extern "C" {
             if (gs.bullet.exists)
                 drawBullet(ga, gs);
         }
-        EndDrawing();
+    }
+
+    void updateAndDrawSettings(const GameAssets& ga, GameState& gs) 
+    {
+        auto prvusr = gs.usr;
+        
+        updateMusic(ga, gs);
+        
+        auto sndPos = Vector2{(float)int(GetScreenWidth() * 0.333f), (float)int(GetScreenHeight() * 0.25f)};
+        auto musPos = Vector2{(float)int(GetScreenWidth() * 0.666f), (float)int(GetScreenHeight() * 0.25f)};
+        drawTile(ga, {3, 2}, sndPos);
+        if (!gs.usr.sndEnabled) 
+            drawTile(ga, {3, 3}, sndPos);
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && Vector2DistanceSqr(sndPos, GetMousePosition()) < TILE_RADIUS * TILE_RADIUS)
+            gs.usr.sndEnabled = !gs.usr.sndEnabled;
+        drawTile(ga, {3, 5}, musPos);
+        if (!gs.usr.musEnabled)
+            drawTile(ga, {3, 3}, musPos);
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && Vector2DistanceSqr(musPos, GetMousePosition()) < TILE_RADIUS * TILE_RADIUS)
+            gs.usr.musEnabled = !gs.usr.musEnabled;
+
+        auto movPos = Vector2{(float)int(GetScreenWidth() * 0.333f) - TILE_SIZE * 2.0f, (float)int(GetScreenHeight() * 0.25f + TILE_RADIUS * 4.0f)};
+        drawTile(ga, {3, (gs.usr.velEnabled ? 1 : 0)}, movPos);
+        drawText(ga, "board movement", movPos + Vector2{TILE_SIZE * 2.0f, -TILE_RADIUS + TILE_PIXEL * 4.0f}, WHITE);
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && abs(movPos.y - GetMousePosition().y) < TILE_RADIUS) {
+            gs.usr.velEnabled = !gs.usr.velEnabled;
+            if (!gs.usr.velEnabled) gs.usr.accEnabled = false;
+        }
+        auto accPos = movPos + Vector2{0, TILE_RADIUS * 3.0f};
+        drawTile(ga, {3, (gs.usr.accEnabled ? 1 : 0)}, accPos);
+        drawText(ga, "acceleration", accPos + Vector2{TILE_SIZE * 2.0f, -TILE_RADIUS + TILE_PIXEL * 4.0f}, WHITE);
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && abs(accPos.y - GetMousePosition().y) < TILE_RADIUS)
+            gs.usr.accEnabled = !gs.usr.accEnabled;
+        auto colPos = accPos + Vector2{0, TILE_RADIUS * 3.0f};
+        drawTile(ga, {3, ((gs.usr.n_params == 1) ? 1 : 0)}, colPos);
+        drawText(ga, "color only", colPos + Vector2{TILE_SIZE * 2.0f, -TILE_RADIUS + TILE_PIXEL * 4.0f}, WHITE);
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && abs(colPos.y - GetMousePosition().y) < TILE_RADIUS)
+            gs.usr.n_params = (gs.usr.n_params == 1) ? 2 : 1;
+
+
+        if (prvusr != gs.usr)
+            saveUserData(gs);
+
+            updateSettingsButton(ga, gs);
+        drawSettingsButton(ga, gs);
     }
 
     DLL_EXPORT void updateAndDraw(const GameAssets& ga, GameState& gs) 
@@ -762,20 +871,32 @@ extern "C" {
             gs.tmp.timeOffset = gs.time - GetTime();
             gs.tmp.timeOffsetSet = true;
         }
-        
-        if (IsWindowFocused()) {
-            if (gs.focusTime == 0)
-                gs.focusTime = getTime(gs);
-            if (getTime(gs) - gs.focusTime > UNFOCUS_TIMEOUT && GetFrameTime() < 1.0) {
-                for (int i = 0; i < UPDATE_ITS; ++i)
-                    update(gs);
-                updateOnce(gs);
-            }
-        } else  {
-            gs.focusTime = 0;
-        }
 
-        draw(ga, gs);
+        if (!gs.usr.velEnabled || !gs.usr.accEnabled || (gs.usr.n_params == 1))
+            gs.alteredDifficulty = true;
+        
+        BeginDrawing();
+        ClearBackground(BLACK);        
+        if (gs.settingsOpened) {
+            updateAndDrawSettings(ga, gs);
+        } else {
+            updateSettingsButton(ga, gs);
+            if (IsWindowFocused()) {                            
+                if (gs.inputTimeoutTime == 0)
+                    gs.inputTimeoutTime = getTime(gs);
+                if (getTime(gs) - gs.inputTimeoutTime > INPUT_TIMEOUT && GetFrameTime() < 1.0) {
+                    for (int i = 0; i < UPDATE_ITS; ++i)
+                        update(gs);
+                    updateOnce(ga, gs);
+                    updateMusic(ga, gs);
+                }
+            } else  {
+                gs.inputTimeoutTime = 0;
+            }            
+            draw(ga, gs);
+            drawSettingsButton(ga, gs);
+        }
+        EndDrawing();
 
         gs.time = GetTime();
     }

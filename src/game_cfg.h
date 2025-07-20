@@ -7,13 +7,16 @@
 #define WINDOW_HEIGHT  864
 #define BOARD_WIDTH    9
 #define BOARD_HEIGHT   36
+#define TILE_SIZE      16.0f
 #define TILE_RADIUS    std::min(GetScreenWidth(), GetScreenHeight()) / (BOARD_WIDTH * 2.0f)
+#define TILE_PIXEL     int((TILE_RADIUS * 2.0f) / TILE_SIZE)
 #define MAX_PARTICLES  1024
 #define MAX_TODROP     1024
 
 #define BOARD_EMP_BOT_ROW_GAP 10
 #define BOARD_WARNING_GAP 3
 #define BOARD_SPEED 1.0f
+#define BOARD_CONST_SPEED 3.0f
 #define BOARD_ACC 0.01f
 #define RAND_FLOAT static_cast <float> (rand()) / (static_cast <float> (RAND_MAX) + 1.0f)
 #define RAND_FLOAT_SIGNED (2.0f * RAND_FLOAT - 0.5f)
@@ -42,6 +45,6 @@
 #define COLORS std::array<Color, 5>{ RED, GREEN, BLUE, ORANGE, PINK }
 #define TOGOI std::vector<int>{1, 0, 3, 2, 5, 4}
 #define TOGO std::vector<ThingPos>{{pos.row, pos.col + 1}, {pos.row, pos.col - 1}, {pos.row - 1, pos.col}, {pos.row + 1, pos.col}, {pos.row - 1, ((pos.row + gs.board.even) % 2) ? (pos.col + 1) : (pos.col - 1)}, {pos.row + 1, ((pos.row + gs.board.even) % 2) ? (pos.col + 1) : (pos.col - 1)}}
-#define UNFOCUS_TIMEOUT 0.1f
+#define INPUT_TIMEOUT 0.1f
 #define REARM_TIMEOUT 0.25f
 #define N_TO_DROP 4
