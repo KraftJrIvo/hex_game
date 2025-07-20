@@ -9,7 +9,7 @@
 #define BOARD_HEIGHT   36
 #define TILE_SIZE      16.0f
 #define TILE_RADIUS    std::min(GetScreenWidth(), GetScreenHeight()) / (BOARD_WIDTH * 2.0f)
-#define TILE_PIXEL     int((TILE_RADIUS * 2.0f) / TILE_SIZE)
+#define TILE_PIXEL     (TILE_RADIUS * 2.0f) / TILE_SIZE
 #define MAX_PARTICLES  1024
 #define MAX_TODROP     1024
 
@@ -45,6 +45,10 @@
 #define COLORS std::array<Color, 5>{ RED, GREEN, BLUE, ORANGE, PINK }
 #define TOGOI std::vector<int>{1, 0, 3, 2, 5, 4}
 #define TOGO std::vector<ThingPos>{{pos.row, pos.col + 1}, {pos.row, pos.col - 1}, {pos.row - 1, pos.col}, {pos.row + 1, pos.col}, {pos.row - 1, ((pos.row + gs.board.even) % 2) ? (pos.col + 1) : (pos.col - 1)}, {pos.row + 1, ((pos.row + gs.board.even) % 2) ? (pos.col + 1) : (pos.col - 1)}}
-#define INPUT_TIMEOUT 0.1f
+#ifdef PLATFORM_ANDROID
+    #define INPUT_TIMEOUT 1.0f
+#else
+    #define INPUT_TIMEOUT 0.1f
+#endif
 #define REARM_TIMEOUT 0.25f
 #define N_TO_DROP 4

@@ -485,13 +485,13 @@ extern "C" {
         }
     }
 
-    void flyParticles(GameState& gs, float delta) {
+    void flyParticles(GameState& gs) {
         bool someInFrame = false;
         for (int i = 0; i < gs.tmp.particles.count(); ++i) {
             auto& prt = gs.tmp.particles.at(i);
             if (prt.exists) {
-                prt.pos += prt.vel * delta;
-                prt.vel += GRAVITY * Vector2{0.0f, 1.0f} * delta;
+                prt.pos += prt.vel * GetFrameTime();
+                prt.vel += GRAVITY * Vector2{0.0f, 1.0f} * GetFrameTime();
                 if (prt.pos.y < GetScreenHeight())
                     someInFrame = true;
             }
@@ -509,7 +509,7 @@ extern "C" {
         addParticle(gs, gs.gun.next, {GetScreenWidth() - TILE_RADIUS, GetScreenHeight() - TILE_RADIUS}, Vector2{50.0f * RAND_FLOAT_SIGNED, -400.0f - 100.0f * RAND_FLOAT});
         if (gs.gun.extraArmed)
             addParticle(gs, gs.gun.extra, {TILE_RADIUS, GetScreenHeight() - TILE_RADIUS}, Vector2{50.0f * RAND_FLOAT_SIGNED, -400.0f - 100.0f * RAND_FLOAT});
-        if (gs.score > gs.usr.bestScore) {
+        if (!gs.alteredDifficulty && gs.score > gs.usr.bestScore) {
             gs.usr.bestScore = gs.score;
             saveUserData(gs);
         }
@@ -517,16 +517,7 @@ extern "C" {
 
     void update(GameState& gs) 
     {
-        if (gs.gameOver) {
-            if (getTime(gs) > gs.gameOverTime + GAME_OVER_TIMEOUT) {
-#ifdef PLATFORM_ANDROID
-                if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT))
-#else
-                if ((IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)))
-#endif            
-                resetGame(gs);
-            }
-        } else if (gs.gameStartTime + GAME_START_TIME < getTime(gs)) {
+        if (gs.gameStartTime + GAME_START_TIME < getTime(gs)) {
             auto delta = GetFrameTime() / UPDATE_ITS;
 
 #ifdef PLATFORM_ANDROID
@@ -554,7 +545,16 @@ extern "C" {
 
     void updateOnce(const GameAssets& ga, GameState& gs) 
     {   
-        if (gs.gameStartTime + GAME_START_TIME < getTime(gs)) {
+        if (gs.gameOver) {
+            if (getTime(gs) > gs.gameOverTime + GAME_OVER_TIMEOUT) {
+#ifdef PLATFORM_ANDROID
+                if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT))
+#else
+                if ((IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)))
+#endif            
+                resetGame(gs);
+            }
+        } else if (gs.gameStartTime + GAME_START_TIME < getTime(gs)) {
             if (gs.gameOver) {
                 for (int i = 0; i < BOARD_HEIGHT; ++i) {
                     for (int j = 0; j < BOARD_WIDTH - ((i + gs.board.even) % 2); ++j) {
@@ -623,8 +623,6 @@ extern "C" {
 
             }
 
-            flyParticles(gs, GetFrameTime());
-
             if (gs.firstShotFired) {
                 if (gs.usr.velEnabled) 
                     gs.board.pos += TILE_PIXEL * (gs.usr.accEnabled ? gs.board.speed : BOARD_CONST_SPEED) * GetFrameTime();
@@ -669,7 +667,7 @@ extern "C" {
 
     void drawTile(const GameAssets& ga, const ThingPos& tpos, Vector2 pos, Color col = WHITE, Vector2 sz = {TILE_SIZE, TILE_SIZE}) {
         pos = {(float)int(pos.x - sz.x * TILE_PIXEL * 0.5f), (float)int(pos.y - sz.y * TILE_PIXEL * 0.5f)};
-        DrawTexturePro(ga.tiles, {tpos.col * TILE_SIZE, tpos.row * TILE_SIZE, sz.x, sz.y}, {pos.x, pos.y, sz.x * TILE_PIXEL, sz.y * TILE_PIXEL}, {0, 0}, 0, col);
+        DrawTexturePro(ga.tiles, {tpos.col * TILE_SIZE, tpos.row * TILE_SIZE, sz.x, sz.y}, {pos.x, pos.y, (float)int(sz.x * TILE_PIXEL), (float)int(sz.y * TILE_PIXEL)}, {0, 0}, 0, col);
     }
 
     void drawThing(const GameAssets& ga, const GameState& gs, Vector2 pos, const Thing& thing) {
@@ -721,8 +719,8 @@ extern "C" {
     void drawGameOver(const GameAssets& ga, const GameState& gs) {
         float coeff = easeOutBounce(1.0f - std::clamp((gs.gameOverTime + GAME_OVER_TIMEOUT - getTime(gs))/GAME_OVER_TIMEOUT_BEF, 0.0, 1.0));
         Vector2 skulpos = {GetScreenWidth() * 0.5f, GetScreenHeight() * -0.25f + coeff * GetScreenHeight() * 0.5f};
-        drawTile(ga, {2, ((int(floor(getTime(gs) * 10)) % 2 == 0) ? 5 : ((gs.score == 0) ? 8 : ((gs.usr.bestScore == gs.score) ? 7 : 6)))}, skulpos);
-        auto verdictstr = (gs.usr.bestScore == gs.score) ? ((gs.usr.bestScore > 0) ? std::string("NEW RECORD!") : std::string("Really now???")) : ("Best: " + std::to_string(gs.usr.bestScore));
+        drawTile(ga, {2, ((int(floor(getTime(gs) * 10)) % 2 == 0) ? 5 : (gs.alteredDifficulty ? 9 : ((gs.score == 0) ? 8 : ((gs.usr.bestScore == gs.score) ? 7 : 6))))}, skulpos);
+        auto verdictstr = (gs.usr.bestScore == gs.score && !gs.alteredDifficulty) ? ((gs.usr.bestScore > 0) ? std::string("NEW RECORD!") : std::string("Really now???")) : ("Best: " + std::to_string(gs.usr.bestScore));
         auto sz = getTextSize(ga);
         auto vmeas = MeasureTextEx(ga.font, verdictstr.c_str(), sz, 1.0);
         drawText(ga, verdictstr, skulpos + Vector2{-vmeas.x * 0.5f, TILE_RADIUS * 3.0f - vmeas.y * 0.5f}, WHITE);
@@ -797,7 +795,7 @@ extern "C" {
     }
 
     void updateSettingsButton(const GameAssets& ga, GameState& gs) {
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && Vector2DistanceSqr({(float)GetScreenWidth(), 0.0f}, GetMousePosition()) < TILE_RADIUS * TILE_RADIUS * 4) {
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && Vector2DistanceSqr({(float)GetScreenWidth(), 0.0f}, GetMousePosition()) < TILE_RADIUS * TILE_RADIUS * 4 * 2.0f) {
             gs.settingsOpened = !gs.settingsOpened;
             gs.inputTimeoutTime = getTime(gs);
         }
@@ -838,21 +836,21 @@ extern "C" {
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && Vector2DistanceSqr(musPos, GetMousePosition()) < TILE_RADIUS * TILE_RADIUS)
             gs.usr.musEnabled = !gs.usr.musEnabled;
 
-        auto movPos = Vector2{(float)int(GetScreenWidth() * 0.333f) - TILE_SIZE * 2.0f, (float)int(GetScreenHeight() * 0.25f + TILE_RADIUS * 4.0f)};
+        auto movPos = Vector2{(float)int(GetScreenWidth() * 0.333f) - TILE_RADIUS * 2.0f, (float)int(GetScreenHeight() * 0.25f + TILE_RADIUS * 4.0f)};
         drawTile(ga, {3, (gs.usr.velEnabled ? 1 : 0)}, movPos);
-        drawText(ga, "board movement", movPos + Vector2{TILE_SIZE * 2.0f, -TILE_RADIUS + TILE_PIXEL * 4.0f}, WHITE);
+        drawText(ga, "board movement", movPos + Vector2{TILE_RADIUS * 1.5f, -TILE_RADIUS + TILE_PIXEL * 2.0f}, WHITE);
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && abs(movPos.y - GetMousePosition().y) < TILE_RADIUS) {
             gs.usr.velEnabled = !gs.usr.velEnabled;
             if (!gs.usr.velEnabled) gs.usr.accEnabled = false;
         }
         auto accPos = movPos + Vector2{0, TILE_RADIUS * 3.0f};
         drawTile(ga, {3, (gs.usr.accEnabled ? 1 : 0)}, accPos);
-        drawText(ga, "acceleration", accPos + Vector2{TILE_SIZE * 2.0f, -TILE_RADIUS + TILE_PIXEL * 4.0f}, WHITE);
+        drawText(ga, "acceleration", accPos + Vector2{TILE_RADIUS * 1.5f, -TILE_RADIUS + TILE_PIXEL * 2.0f}, WHITE);
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && abs(accPos.y - GetMousePosition().y) < TILE_RADIUS)
             gs.usr.accEnabled = !gs.usr.accEnabled;
         auto colPos = accPos + Vector2{0, TILE_RADIUS * 3.0f};
         drawTile(ga, {3, ((gs.usr.n_params == 1) ? 1 : 0)}, colPos);
-        drawText(ga, "color only", colPos + Vector2{TILE_SIZE * 2.0f, -TILE_RADIUS + TILE_PIXEL * 4.0f}, WHITE);
+        drawText(ga, "color only", colPos + Vector2{TILE_RADIUS * 1.5f, -TILE_RADIUS + TILE_PIXEL * 2.0f}, WHITE);
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && abs(colPos.y - GetMousePosition().y) < TILE_RADIUS)
             gs.usr.n_params = (gs.usr.n_params == 1) ? 2 : 1;
 
@@ -888,8 +886,9 @@ extern "C" {
                     for (int i = 0; i < UPDATE_ITS; ++i)
                         update(gs);
                     updateOnce(ga, gs);
-                    updateMusic(ga, gs);
                 }
+                flyParticles(gs);
+                updateMusic(ga, gs);
             } else  {
                 gs.inputTimeoutTime = 0;
             }            
