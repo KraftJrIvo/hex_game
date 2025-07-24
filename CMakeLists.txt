@@ -21,7 +21,7 @@ include(../cmake/EmbedResources.cmake)
 if(NOT TARGET embedfile)
     add_executable(embedfile "../src/util/embedfile.c")
 endif()
-embed_resources("${HEX_GAME_SOURCE_DIR}/res" EMBEDDED_SOURCES EXCLUDE_EXTENSIONS ".rc" ".ico" ".txt")
+embed_resources("${HEX_GAME_SOURCE_DIR}/res" EMBEDDED_SOURCES HEX_GAME_RES EXCLUDE_EXTENSIONS ".rc" ".ico" ".txt")
 
 # TARGET
 set(GAME_SOURCE_FILES    

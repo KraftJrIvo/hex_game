@@ -51,7 +51,7 @@ extern "C" {
         return GetFrameTime();// * 0.5f;
     }
 
-    void playSound(const GameAssets& ga, const GameState& gs, const Sound& snd) {
+    void playSound(const GameState& gs, const Sound& snd) {
         if (gs.usr.sndEnabled)
             PlaySound(snd);
     }
@@ -74,6 +74,10 @@ extern "C" {
 
     float easeOutQuad(float t) {
         return 1 - (1 - t) * (1 - t);
+    }
+
+    float easeInQuad(float t) {
+        return t * t;
     }
 
     Rectangle getBoardRect(const GameState& gs) {
@@ -152,6 +156,19 @@ extern "C" {
         }
     }
 
+    void addAnimation(GameState& gs, const Texture2D* tex, float interval, Vector2 pos, Color col = WHITE){
+        gs.tmp.animations.acquire(Animation{tex, getTime(gs), interval, pos, col});
+    }
+
+    void addScorePoints(GameState& gs, Vector2 pos, Color col, int n) {
+        for (int i = 0; i < n; ++i) {
+            Vector2 endPos = {TILE_RADIUS * 2.0f + (GetScreenWidth() - TILE_RADIUS * 6.0f) * 0.25f, GetScreenHeight() - TILE_RADIUS};
+            Vector2 cpPos = {GetScreenWidth() * 0.5f + RAND_FLOAT_SIGNED * GetScreenWidth() * 0.33f, 0.5f * (endPos.y + pos.y) };
+            gs.tmp.scorePoints.acquire(ScorePoint{pos + TILE_RADIUS * RAND_FLOAT_SIGNED_2D, cpPos, endPos, getTime(gs), SCORE_FLY_TIME + RAND_FLOAT * SCORE_FLY_SPREAD, col});
+        }
+        gs.score += n;
+    }
+
     void addParticle(GameState& gs, const Thing& thing, Vector2 pos, Vector2 vel) {
         gs.tmp.particles.acquire(Particle{true, thing, pos, vel});
     }
@@ -214,7 +231,7 @@ extern "C" {
         gs.rearmTime = getTime(gs);
     }
 
-    void swapExtra(const GameAssets& ga, GameState& gs) {
+    void swapExtra(GameState& gs) {
         if (gs.gun.extraArmed) {
             auto e = gs.gun.extra;
             gs.gun.extra = gs.gun.armed;
@@ -225,11 +242,11 @@ extern "C" {
             gs.gun.extraArmed = true;
             rearm(gs);
         }
-        playSound(ga, gs, ga.whoosh[1]);
+        playSound(gs, gs.ga.p->whoosh[1]);
         gs.swapTime = getTime(gs);
     }
 
-    void loadAssets(GameAssets& ga) {
+    void loadAssets(GameAssets& ga, GameState& gs) {
         ga.tiles = LoadTextureFromImage(LoadImageFromMemory(".png", res_tiles_png, res_tiles_png_len));
         ga.explosion = LoadTextureFromImage(LoadImageFromMemory(".png", res_explosion_png, res_explosion_png_len));
         ga.splash = LoadTextureFromImage(LoadImageFromMemory(".png", res_splash_png, res_splash_png_len));
@@ -239,11 +256,18 @@ extern "C" {
         ga.clang[0] = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_clang0_ogg, res_clang0_ogg_len));
         ga.clang[1] = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_clang1_ogg, res_clang1_ogg_len));
         ga.clang[2] = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_clang2_ogg, res_clang2_ogg_len));
+        ga.pop[0] = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_pop0_ogg, res_pop0_ogg_len));
+        ga.pop[1] = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_pop1_ogg, res_pop1_ogg_len));
+        ga.pop[2] = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_pop2_ogg, res_pop2_ogg_len));
         ga.sndexp = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_sndexp_ogg, res_sndexp_ogg_len));
-        ga.shatter = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_shatter_ogg, res_shatter_ogg_len));
+        ga.shatter[0] = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_shatter0_ogg, res_shatter0_ogg_len));
+        ga.shatter[1] = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_shatter1_ogg, res_shatter1_ogg_len));
         ga.whoosh[0] = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_whoosh0_ogg, res_whoosh0_ogg_len));
         ga.whoosh[1] = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_whoosh1_ogg, res_whoosh1_ogg_len));
         ga.sizzle = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_sizzle_ogg, res_sizzle_ogg_len));
+        ga.fail = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_fail_ogg, res_fail_ogg_len));
+        ga.shake = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_shake_ogg, res_shake_ogg_len));
+        ga.beep = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_beep_ogg, res_beep_ogg_len));
 
         ga.postProcFragShader = LoadShaderFromMemory(NULL, (const char*)res_post_proc_fs);
         ga.maskFragShader = LoadShaderFromMemory(NULL, (const char*)res_mask_fs);
@@ -251,13 +275,15 @@ extern "C" {
         char8_t _allChars[228] = u8" !\"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ";
         int c; auto cdpts = LoadCodepoints((const char*)_allChars, &c);
         ga.font = LoadFontFromMemory(".ttf", res_font_otf, res_font_otf_len, 39, cdpts, c);
+
+        gs.ga.p = &ga;
     }
 
-    DLL_EXPORT void saveUserData(const GameState& gs) {
+    void saveUserData(const GameState& gs) {
         SaveFileData("userdata", (void*)&gs.usr, sizeof(GameState::UserData));
     }
 
-    DLL_EXPORT void loadUserData(GameState& gs) {
+    void loadUserData(GameState& gs) {
         int sz = sizeof(GameState::UserData);
         std::vector<unsigned char> buffer(sz);
         int datasz;
@@ -266,7 +292,8 @@ extern "C" {
             gs.usr = *((GameState::UserData*)ptr);
     }
 
-    void setStuff(GameState& gs) {
+    void setStuff(const GameAssets* ga, GameState& gs) {
+        gs.ga.p = ga;
         loadUserData(gs);
         gs.tmp.renderTex = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
         SetTextureWrap(gs.tmp.renderTex.texture, TEXTURE_WRAP_CLAMP);
@@ -274,12 +301,15 @@ extern "C" {
 
     DLL_EXPORT void setState(GameState& gs, const GameState& ngs)
     {
+        const GameAssets* ga = gs.ga.p;
         gs = ngs;
-        setStuff(gs);
+        setStuff(ga, gs);
     }
 
-    void reset(const GameAssets& ga, GameState& gs) {
+    void reset(GameState& gs) {
+        const GameAssets* ga = gs.ga.p;
         gs = GameState{0};
+        gs.ga.p = ga;
         gs.seed = rand() % std::numeric_limits<int>::max();
         for (int i = 0; i < gs.board.things.size(); ++i)
             std::fill(gs.board.things[i].begin(), gs.board.things[i].end(), Tile());
@@ -297,13 +327,13 @@ extern "C" {
             StopMusicStream(ga.music);
         }
 
-        loadAssets(ga);
+        loadAssets(ga, gs);
         PlayMusicStream(ga.music);
         
-        reset(ga, gs);
+        reset(gs);
     }
 
-    void shootAndRearm(const GameAssets& ga, GameState& gs) {
+    void shootAndRearm(GameState& gs) {
         gs.firstShotFired = true;
         gs.bullet.exists = true;
         gs.bullet.rebouncing = false;
@@ -311,7 +341,7 @@ extern "C" {
         gs.bullet.thing = gs.gun.armed;
         gs.bullet.vel = BULLET_SPEED * Vector2{cos(dir), -sin(dir)};
         gs.bullet.pos = {(float)GetScreenWidth() * 0.5f, (float)GetScreenHeight() - TILE_RADIUS};
-        playSound(ga, gs, ga.whoosh[0]);
+        playSound(gs, gs.ga.p->whoosh[0]);
         rearm(gs);
     }
 
@@ -430,28 +460,19 @@ extern "C" {
         }
     }
 
-    void scorePoints(GameState& gs, int amount) {
-        gs.score += amount * gs.combo;
-    }
-
     void addDrop(GameState& gs, Vector2 pos) {
         gs.tmp.shDropCenters[gs.tmp.shNDrops] = pos;
         gs.tmp.shDropTimes[gs.tmp.shNDrops] = getTime(gs);
         gs.tmp.shNDrops++;
     }
 
-    void addAnimation(const GameAssets& ga, GameState& gs, const Texture2D* tex, float interval, Vector2 pos) {
-        gs.tmp.animations.acquire(Animation{tex, getTime(gs), interval, pos});
-    }
-
-    void triggerBomb(const GameAssets& ga, GameState& gs, const ThingPos& pos) {
+    void triggerBomb(GameState& gs, const ThingPos& pos) {
         auto& thing = getTile(gs, pos).thing;
         thing.triggered = true;
         thing.triggerTime = getTime(gs);
         gs.bullet.exists = false;
-        playSound(ga, gs, ga.sizzle);
+        playSound(gs, gs.ga.p->sizzle);
         addParticle(gs, gs.bullet.thing, gs.bullet.pos, {-gs.bullet.vel.x, -400.0f - 100.0f * RAND_FLOAT});
-        scorePoints(gs, 1);
     }
 
     void checkDrop(GameState& gs, const ThingPos& pos, const Thing& thing, int minToDrop = 0) {
@@ -492,76 +513,79 @@ extern "C" {
         gs.board.uncon = uncons[bestK];
     }
 
-    void explodeBomb(const GameAssets& ga, GameState& gs, const ThingPos& pos_);
+    void explodeBomb(GameState& gs, const ThingPos& pos_);
 
-    void doDrop(const GameAssets& ga, GameState& gs, int minToDrop = 0, bool shatter = true, Vector2 vel = Vector2Zero()) {
+    void doDrop(GameState& gs, int minToDrop = 0, bool shatter = true, Vector2 vel = Vector2Zero()) {
         if (gs.board.todrop.count() >= minToDrop) {
-            scorePoints(gs, gs.board.todrop.count() + gs.board.uncon.count());
             for (int i = 0; i < gs.board.todrop.count(); ++i) {
                 auto& td = gs.board.todrop.at(i);
                 removeTile(gs, td);
                 auto pixpos = getPixByPos(gs, td);
                 if (shatter) {
-                    addAnimation(ga, gs, &ga.splash, SPLASH_TIME, pixpos);
-                    playSound(ga, gs, ga.shatter);
+                    addAnimation(gs, &gs.ga.p->splash, SPLASH_TIME, pixpos, COMBO_COLORS[gs.board.lastDropCombo - 1]);
+                    playSound(gs, gs.ga.p->shatter[GetRandomValue(0, 1)]);
                     addShatteredParticles(gs, getTile(gs, td).thing, pixpos);
                 } else {
                     addParticle(gs, getTile(gs, td).thing, getPixByPos(gs, td), vel);
                 }
+                addScorePoints(gs, pixpos, COMBO_COLORS[gs.board.lastDropCombo - 1], gs.board.lastDropCombo);
             }
             for (int i = 0; i < gs.board.uncon.count(); ++i) {                
                 auto& un = gs.board.uncon.at(i);
                 removeTile(gs, un);
-                addParticle(gs, getTile(gs, un).thing, getPixByPos(gs, un), Vector2Zero());
+                auto pixpos = getPixByPos(gs, un);
+                addParticle(gs, getTile(gs, un).thing, pixpos, Vector2Zero());
+                addScorePoints(gs, pixpos, COMBO_COLORS[gs.board.lastDropCombo - 1], gs.board.lastDropCombo);
             }
         }
         gs.board.todrop.clear();
         gs.board.uncon.clear();
     }
 
-    void explodeBomb(const GameAssets& ga, GameState& gs, const ThingPos& pos) {
+    void explodeBomb(GameState& gs, const ThingPos& pos) {
         auto& thing = getTile(gs, pos).thing;
         auto pixpos = getPixByPos(gs, pos);
         addDrop(gs, pixpos);
-        playSound(ga, gs, ga.sndexp);
-        addAnimation(ga, gs, &ga.explosion, EXPLOSION_TIME, pixpos);
+        playSound(gs, gs.ga.p->sndexp);
+        addAnimation(gs, &gs.ga.p->explosion, EXPLOSION_TIME, pixpos);
         auto& tile = getTile(gs, pos);
         removeTile(gs, pos);
         for (auto& n : getNeighs(gs, pos)) {
             auto ntile = getTile(gs, n);
             if (ntile.exists) {
                 if (ntile.thing.bomb) {
-                    triggerBomb(ga, gs, n);
+                    triggerBomb(gs, n);
                 } else {
                     checkDrop(gs, n, getTile(gs, pos).thing);
-                    doDrop(ga, gs);
+                    doDrop(gs);
                 }
             }            
             for (auto& nn : getNeighs(gs, n)) {
                 auto nntile = getTile(gs, nn);
                 if (nntile.exists) {
                     if (nntile.thing.bomb) {
-                        //triggerBomb(ga, gs, nntile.pos);
-                        explodeBomb(ga, gs, nntile.pos);
+                        //triggerBomb(gs, nntile.pos);
+                        explodeBomb(gs, nntile.pos);
                     } else {
                         checkDrop(gs, nntile.pos, getTile(gs, nntile.pos).thing);
-                        doDrop(ga, gs, 0, false, 300.0f * Vector2Normalize(getPixByPos(gs, nntile.pos) - pixpos));
+                        doDrop(gs, 0, false, 300.0f * Vector2Normalize(getPixByPos(gs, nntile.pos) - pixpos));
                     }
                 }
             }
         }
+        addScorePoints(gs, pixpos, COMBO_COLORS[gs.board.lastDropCombo - 1], gs.board.lastDropCombo);
     }
 
-    void checkBomb(const GameAssets& ga, GameState& gs, const ThingPos& pos) {
+    void checkBomb(GameState& gs, const ThingPos& pos) {
         auto& tile = getTile(gs, pos);
         if (tile.thing.triggered) {
             tile.shake = std::clamp((getTime(gs) - tile.thing.triggerTime)/BOMB_TRIGGER_TIME, 0.0, 1.0);
             if (getTime(gs) - tile.thing.triggerTime > BOMB_TRIGGER_TIME)
-                explodeBomb(ga, gs, pos);
+                explodeBomb(gs, pos);
         }
     }
 
-    void flyBullet(const GameAssets& ga, GameState& gs, float delta)
+    void flyBullet(GameState& gs, float delta)
     {
         if (gs.bullet.exists)
             gs.bullet.pos += gs.bullet.vel * delta;
@@ -577,15 +601,15 @@ extern "C" {
             if (prog > 1.0f) {
                 gs.bullet.exists = false;
                 addTile(gs, gs.bullet.lstEmp, Tile{true, gs.bullet.lstEmp, gs.bullet.thing});
-                doDrop(ga, gs, N_TO_DROP); 
+                doDrop(gs, N_TO_DROP); 
                 gs.bullet.rebouncing = false;
             } else {
                 gs.bullet.rebounce = easeOutBounce(prog);
             }
         } else if (gs.bullet.exists) {
             if (gs.bullet.pos.x - BULLET_RADIUS_H < brect.x || gs.bullet.pos.x + BULLET_RADIUS_H > brect.x + brect.width) {
-                playSound(ga, gs, ga.clang[GetRandomValue(0, 2)]);
-                addAnimation(ga, gs, &ga.splash, SPLASH_TIME, gs.bullet.pos + Vector2{gs.bullet.vel.x/abs(gs.bullet.vel.x), 0});
+                playSound(gs, gs.ga.p->clang[GetRandomValue(0, 2)]);
+                addAnimation(gs, &gs.ga.p->splash, SPLASH_TIME, gs.bullet.pos + Vector2{gs.bullet.vel.x/abs(gs.bullet.vel.x), 0});
                 gs.bullet.vel.x *= -1.0f;
             }
 
@@ -599,10 +623,13 @@ extern "C" {
                         Vector2 tpos = getPixByPos(gs, {i, j});
                         if (Vector2DistanceSqr(tpos, gs.bullet.pos) < BULLET_HIT_DIST_SQR ||
                             Vector2DistanceSqr(tpos, gs.bullet.pos + Vector2Normalize(gs.bullet.vel) * BULLET_RADIUS_H) < BULLET_HIT_DIST_SQR) {
-                            playSound(ga, gs, ga.clang[GetRandomValue(0, 2)]);
-                            addAnimation(ga, gs, &ga.splash, SPLASH_TIME, 0.5f * (tpos + getPixByPos(gs, gs.bullet.lstEmp)));
+                            playSound(gs, gs.ga.p->clang[GetRandomValue(0, 2)]);
+                            addAnimation(gs, &gs.ga.p->splash, SPLASH_TIME, 0.5f * (tpos + getPixByPos(gs, gs.bullet.lstEmp)));
+                            gs.board.lastDropCombo = gs.combo;
                             if (tile.thing.bomb) {
-                                triggerBomb(ga, gs, {i, j});
+                                triggerBomb(gs, {i, j});
+                                gs.combo = std::clamp(gs.combo + 1, 1, MAX_COMBO);
+                                addScorePoints(gs, gs.bullet.pos, COMBO_COLORS[gs.board.lastDropCombo - 1], gs.board.lastDropCombo);
                             } else {
                                 checkDrop(gs, gs.bullet.lstEmp, gs.bullet.thing, N_TO_DROP);                                
                                 gs.bullet.rebouncing = true;
@@ -610,6 +637,10 @@ extern "C" {
                                 gs.bullet.rebCp = (gs.bullet.pos - Vector2Normalize(gs.bullet.vel) * BULLET_REBOUNCE)- Vector2{0, gs.board.pos};
                                 gs.bullet.rebEnd = (getPixByPos(gs, gs.bullet.lstEmp)) - Vector2{0, gs.board.pos};
                                 gs.bullet.rebTime = getTime(gs);
+                                if (gs.board.todrop.count() >= N_TO_DROP)
+                                    gs.combo = std::clamp(gs.combo + 1, 1, MAX_COMBO);
+                                else
+                                    gs.combo = std::clamp(gs.combo - 1, 1, MAX_COMBO);                                    
                             }
                             break;
                         }
@@ -619,6 +650,28 @@ extern "C" {
                     break;
             }
         }
+    }
+
+    void flyScorePoints(GameState& gs) {
+        bool someNotDone = false;
+        for (int i = 0; i < gs.tmp.scorePoints.count(); ++i) {
+            auto& sp = gs.tmp.scorePoints.at(i);
+            bool wasDone = sp.done;
+            sp.done = (getTime(gs) - sp.spawnTime > sp.flyTime);
+            if (sp.done) {
+                if (!wasDone) {
+                    gs.tmp.visScore++;
+                    if (getTime(gs) - gs.tmp.lastScoreSnd > SCORE_SND_CD) {
+                        playSound(gs, gs.ga.p->pop[GetRandomValue(0, 1)]);
+                        gs.tmp.lastScoreSnd = getTime(gs);
+                    }
+                }
+            } else {
+                someNotDone = true;
+            }
+        }
+        if (!someNotDone)
+            gs.tmp.scorePoints.clear();
     }
 
     void flyParticles(GameState& gs) {
@@ -674,9 +727,11 @@ extern "C" {
             gs.usr.bestScore = gs.score;
             saveUserData(gs);
         }
+        playSound(gs, gs.ga.p->fail);
+        playSound(gs, gs.ga.p->shake);
     }
 
-    void update(const GameAssets& ga, GameState& gs) 
+    void update(GameState& gs) 
     {
         if (gs.gameStartTime + GAME_START_TIME < getTime(gs)) {
             auto delta = getFrameTime(gs) / UPDATE_ITS;
@@ -700,11 +755,11 @@ extern "C" {
             gs.gun.speed = std::clamp(gs.gun.speed, GUN_START_SPEED, GUN_FULL_SPEED);
             gs.gun.dir = std::clamp(gs.gun.dir, -PI * 0.45f, PI * 0.45f);
 
-            flyBullet(ga, gs, delta);
+            flyBullet(gs, delta);
         }
     }
 
-    void updateOnce(const GameAssets& ga, GameState& gs) 
+    void updateOnce(GameState& gs) 
     {   
         if (gs.gameOver) {
             for (int i = 0; i < BOARD_HEIGHT; ++i) {
@@ -715,7 +770,7 @@ extern "C" {
                             gs.board.things[i][j].exists = false;
                             Vector2 tpos = getPixByPos(gs, {i, j});
                             if (tpos.y > 0) {
-                                playSound(ga, gs, ga.clang[GetRandomValue(0, 2)]);
+                                playSound(gs, gs.ga.p->clang[GetRandomValue(0, 2)]);
                                 addParticle(gs, gs.board.things[i][j].thing, getPixByPos(gs, {i, j}), Vector2{50.0f * RAND_FLOAT_SIGNED, -400.0f - 100.0f * RAND_FLOAT});
                             }
                         }
@@ -728,7 +783,7 @@ extern "C" {
 #else
                 if ((IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)))
 #endif            
-                    reset(ga, gs);
+                    reset(gs);
                 
             }                
         } else if (gs.gameStartTime + GAME_START_TIME < getTime(gs)) {
@@ -744,7 +799,7 @@ extern "C" {
                         if ((GetScreenHeight() - 2 * TILE_RADIUS) - (tpos.y + TILE_RADIUS) < 0)
                             gameOver(gs);
                         if (tile.thing.bomb)
-                            checkBomb(ga, gs, {i, j});
+                            checkBomb(gs, {i, j});
                     }
                 }
             }
@@ -765,7 +820,7 @@ extern "C" {
         #else
                 if ((IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) && !gs.bullet.exists)
         #endif
-                    shootAndRearm(ga, gs);
+                    shootAndRearm(gs);
             }
             
             static int touchCount = 0;                
@@ -774,7 +829,7 @@ extern "C" {
 #else
             if (IsKeyPressed(KEY_LEFT_CONTROL) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && GetMouseY() > GetScreenHeight() - TILE_RADIUS * 2.0f))
 #endif
-                swapExtra(ga, gs);
+                swapExtra(gs);
             touchCount = GetTouchPointCount();
     
             if (gs.board.moveTime > 0 && gs.board.pos < 0) {
@@ -803,83 +858,97 @@ extern "C" {
         }
     }
 
-    void updateMusic(const GameAssets& ga, GameState& gs) {
+    void updateMusic(GameState& gs) {
         if (gs.usr.musEnabled) {
-            UpdateMusicStream(ga.music);
-            auto musicLen = GetMusicTimeLength(ga.music);
-            auto musicTimePlayed = GetMusicTimePlayed(ga.music);
+            UpdateMusicStream(gs.ga.p->music);
+            auto musicLen = GetMusicTimeLength(gs.ga.p->music);
+            auto musicTimePlayed = GetMusicTimePlayed(gs.ga.p->music);
             //if (gs.musicLoopDone && musicTimePlayed < musicLen * 0.5f)
-            //    SeekMusicStream(ga.music, musicLen * 0.5f + musicTimePlayed);
+            //    SeekMusicStream(gs.ga.p->music, musicLen * 0.5f + musicTimePlayed);
             //if (!gs.musicLoopDone && musicTimePlayed > musicLen * 0.5f)
             //    gs.musicLoopDone = true;
         }
     }
 
-    float getTextSize(const GameAssets& ga) {
-        auto sz = ga.font.baseSize * floor(TILE_RADIUS * 2 / ga.font.baseSize);
+    float getTextSize(const GameState& gs) {
+        auto sz = gs.ga.p->font.baseSize * floor(TILE_RADIUS * 2 / gs.ga.p->font.baseSize);
         return sz;
     }
 
-    void drawText(const GameAssets& ga, const std::string txt, Vector2 pos, Color col = WHITE) {
+    void drawText(const GameState& gs, const std::string txt, Vector2 pos, Color col = WHITE) {
         pos = {(float)int(pos.x), (float)int(pos.y)};
         auto pos2 = Vector2{pos.x, (float)int(pos.y + ceil(TILE_PIXEL))};
-        auto sz = getTextSize(ga);
+        auto sz = getTextSize(gs);
         Color darkol = Color{uint8_t(col.r * 0.6f), uint8_t(col.g * 0.6f), uint8_t(col.b * 0.6f), 255};
-        DrawTextEx(ga.font, txt.c_str(), pos2, sz, 1.0, darkol);
-        DrawTextEx(ga.font, txt.c_str(), pos, sz, 1.0, col);
+        DrawTextEx(gs.ga.p->font, txt.c_str(), pos2, sz, 1.0, darkol);
+        DrawTextEx(gs.ga.p->font, txt.c_str(), pos, sz, 1.0, col);
     }
 
-    void drawTile(const GameAssets& ga, const ThingPos& tpos, Vector2 pos, Color col = WHITE, Vector2 sz = {TILE_SIZE, TILE_SIZE}) {
+    void drawTile(const GameState& gs, const ThingPos& tpos, Vector2 pos, Color col = WHITE, Vector2 sz = {TILE_SIZE, TILE_SIZE}) {
         pos = {(float)int(pos.x - sz.x * TILE_PIXEL * 0.5f), (float)int(pos.y - sz.y * TILE_PIXEL * 0.5f)};
-        DrawTexturePro(ga.tiles, {tpos.col * TILE_SIZE, tpos.row * TILE_SIZE, sz.x, sz.y}, {pos.x, pos.y, (float)int(sz.x * TILE_PIXEL), (float)int(sz.y * TILE_PIXEL)}, {0, 0}, 0, col);
+        DrawTexturePro(gs.ga.p->tiles, {tpos.col * TILE_SIZE, tpos.row * TILE_SIZE, sz.x, sz.y}, {pos.x, pos.y, (float)int(sz.x * TILE_PIXEL), (float)int(sz.y * TILE_PIXEL)}, {0, 0}, 0, col);
     }
 
-    void drawThing(const GameAssets& ga, const GameState& gs, Vector2 pos, const Thing& thing, bool masked = false, ThingPos maskTilePos = {}, uint8_t maskId1 = 0, uint8_t maskId2 = 0) {
+    void drawThing(const GameState& gs, Vector2 pos, const Thing& thing, bool masked = false, ThingPos maskTilePos = {}, uint8_t maskId1 = 0, uint8_t maskId2 = 0) {
 
         if (masked) {
             (*((GameState*)(&gs))).tmp.shMaskTilePos = Vector2{float(maskTilePos.col + maskId1), float(maskTilePos.row)};
             (*((GameState*)(&gs))).tmp.shMaskId = maskId2;
-            SetShaderValue(ga.maskFragShader, GetShaderLocation(ga.maskFragShader, "maskTilePos"), &gs.tmp.shMaskTilePos, SHADER_UNIFORM_VEC2);
-            SetShaderValue(ga.maskFragShader, GetShaderLocation(ga.maskFragShader, "maskId"), &gs.tmp.shMaskId, SHADER_UNIFORM_UINT);
+            SetShaderValue(gs.ga.p->maskFragShader, GetShaderLocation(gs.ga.p->maskFragShader, "maskTilePos"), &gs.tmp.shMaskTilePos, SHADER_UNIFORM_VEC2);
+            SetShaderValue(gs.ga.p->maskFragShader, GetShaderLocation(gs.ga.p->maskFragShader, "maskId"), &gs.tmp.shMaskId, SHADER_UNIFORM_UINT);
             BeginDrawing();
-            BeginShaderMode(ga.maskFragShader);
-            rlEnableShader(ga.maskFragShader.id);
-            rlSetUniformSampler(GetShaderLocation(ga.maskFragShader, "tiles"), ga.tiles.id);
+            BeginShaderMode(gs.ga.p->maskFragShader);
+            rlEnableShader(gs.ga.p->maskFragShader.id);
+            rlSetUniformSampler(GetShaderLocation(gs.ga.p->maskFragShader, "tiles"), gs.ga.p->tiles.id);
         }
         
         if (thing.bomb)
-            drawTile(ga, {4, thing.triggered ? ((int(floor(getTime(gs) * 20)) % 2 == 0) ? 4 : 5) : 3}, pos);
+            drawTile(gs, {4, thing.triggered ? ((int(floor(getTime(gs) * 20)) % 2 == 0) ? 4 : 5) : 3}, pos);
         else
-            drawTile(ga, {0, (gs.usr.n_params == 1) ? 0 : thing.shp}, pos, COLORS[thing.clr], {TILE_SIZE, TILE_SIZE + 1.0f});
+            drawTile(gs, {0, (gs.usr.n_params == 1) ? 0 : thing.shp}, pos, COLORS[thing.clr], {TILE_SIZE, TILE_SIZE + 1.0f});
 
         if (masked) {
             EndShaderMode();
         }
 
         //if (gs.usr.n_params >= 3)
-        //    drawTile(ga, {0, thing.sym}, pos, COLORS[thing.clr]);
+        //    drawTile({0, thing.sym}, pos, COLORS[thing.clr]);
         //for (auto& n : thing.neighs)
         //    if (n.exists) DrawLineV(pos, (getPixByPos(gs, n.pos) + pos) * 0.5, WHITE);
     }
 
-    void drawParticles(const GameAssets& ga, const GameState& gs) {
+    void drawAnimations(const GameState& gs) {
         for (int i = 0; i < gs.tmp.animations.count(); ++i) {
             auto& anim = gs.tmp.animations.get(i);
             if (!anim.done) {
                 auto nframes = int(anim.tex->width / anim.tex->height);
                 auto frame = std::clamp(int(std::clamp(float((getTime(gs) - anim.startTime)/anim.interval), 0.0f, 1.0f) * nframes), 0, nframes - 1);
-                DrawTexturePro(*anim.tex, {float(anim.tex->height * frame), 0.0f, float(anim.tex->height), float(anim.tex->height)}, {anim.pos.x - anim.tex->height * 0.5f * TILE_PIXEL, anim.pos.y - anim.tex->height * 0.5f * TILE_PIXEL, anim.tex->height * TILE_PIXEL, anim.tex->height * TILE_PIXEL}, {0, 0}, 0, WHITE);
-            }
-        }
-        for (int i = gs.tmp.particles.count() - 1; i >= 0; --i) {
-            auto& prt = gs.tmp.particles.get(i);
-            if (prt.exists) {
-                drawThing(ga, gs, prt.pos, prt.thing, prt.masked, prt.maskTilesStartPos, prt.maskId1, prt.maskId2);
+                DrawTexturePro(*anim.tex, {float(anim.tex->height * frame), 0.0f, float(anim.tex->height), float(anim.tex->height)}, {anim.pos.x - anim.tex->height * 0.5f * TILE_PIXEL, anim.pos.y - anim.tex->height * 0.5f * TILE_PIXEL, anim.tex->height * TILE_PIXEL, anim.tex->height * TILE_PIXEL}, {0, 0}, 0, anim.col);
             }
         }
     }
 
-    void drawBoard(const GameAssets& ga, const GameState& gs) {
+    void drawScorePoints(const GameState& gs) {
+        for (int i = gs.tmp.scorePoints.count() - 1; i >= 0; --i) {
+            auto& sp = gs.tmp.scorePoints.get(i);
+            if (!sp.done) {
+                float coeff = easeInQuad(std::clamp((getTime(gs) - sp.spawnTime) / sp.flyTime, 0.0, 1.0));
+                auto pos = GetSplinePointBezierQuad(sp.spawnPos, sp.cpPos, sp.endPos, coeff);
+                drawTile(gs, {4, 0}, pos, sp.col);
+            }
+        }
+    }
+
+    void drawParticles(const GameState& gs) {
+        for (int i = gs.tmp.particles.count() - 1; i >= 0; --i) {
+            auto& prt = gs.tmp.particles.get(i);
+            if (prt.exists) {
+                drawThing(gs, prt.pos, prt.thing, prt.masked, prt.maskTilesStartPos, prt.maskId1, prt.maskId2);
+            }
+        }
+    }
+
+    void drawBoard(const GameState& gs) {
         for (int i = 0; i < BOARD_HEIGHT; ++i) {
             for (int j = 0; j < BOARD_WIDTH - ((i + gs.board.even) % 2); ++j) {
                 const Tile& tile = gs.board.things[i][j];
@@ -890,7 +959,7 @@ extern "C" {
                             std::clamp((getTime(gs) - gs.gameOverTime)/std::max((GAME_OVER_TIME_PER_ROW * (BOARD_HEIGHT - 1 - i)), 0.001f), 0.0, 1.0) :
                             tile.shake
                         );
-                    drawThing(ga, gs, tpos + shake, tile.thing);
+                    drawThing(gs, tpos + shake, tile.thing);
                 }
             }
         }
@@ -904,31 +973,34 @@ extern "C" {
         //    DrawCircleV(getPixByPos(gs, mpos), 5, WHITE);
     }
 
-    void drawBullet(const GameAssets& ga, const GameState& gs) {
-        drawThing(ga, gs, gs.bullet.pos, gs.bullet.thing);
+    void drawBullet(const GameState& gs) {
+        drawThing(gs, gs.bullet.pos, gs.bullet.thing);
     }
 
-    void drawGameOver(const GameAssets& ga, const GameState& gs) {
+    void drawGameOver(const GameState& gs) {
         float coeff = easeOutBounce(1.0f - std::clamp((gs.gameOverTime + GAME_OVER_TIMEOUT - getTime(gs))/GAME_OVER_TIMEOUT_BEF, 0.0, 1.0));
         Vector2 skulpos = {GetScreenWidth() * 0.5f, GetScreenHeight() * -0.25f + coeff * GetScreenHeight() * 0.5f};
-        drawTile(ga, {2, ((int(floor(getTime(gs) * 10)) % 2 == 0) ? 5 : (gs.alteredDifficulty ? 9 : ((gs.score == 0) ? 8 : ((gs.usr.bestScore == gs.score) ? 7 : 6))))}, skulpos);
+        drawTile(gs, {2, ((int(floor(getTime(gs) * 10)) % 2 == 0) ? 5 : (gs.alteredDifficulty ? 9 : ((gs.score == 0) ? 8 : ((gs.usr.bestScore == gs.score) ? 7 : 6))))}, skulpos);
         auto verdictstr = (gs.usr.bestScore == gs.score && !gs.alteredDifficulty) ? ((gs.usr.bestScore > 0) ? std::string("NEW RECORD!") : std::string("Really now???")) : ("Best: " + std::to_string(gs.usr.bestScore));
-        auto sz = getTextSize(ga);
-        auto vmeas = MeasureTextEx(ga.font, verdictstr.c_str(), sz, 1.0);
-        drawText(ga, verdictstr, skulpos + Vector2{-vmeas.x * 0.5f, TILE_RADIUS * 3.0f - vmeas.y * 0.5f}, WHITE);
+        auto sz = getTextSize(gs);
+        auto vmeas = MeasureTextEx(gs.ga.p->font, verdictstr.c_str(), sz, 1.0);
+        drawText(gs, verdictstr, skulpos + Vector2{-vmeas.x * 0.5f, TILE_RADIUS * 3.0f - vmeas.y * 0.5f}, WHITE);
 
         auto scorestr = gs.alteredDifficulty ? ("\"" + std::to_string(gs.score) + "\"") : std::to_string(gs.score);
-        auto meas = MeasureTextEx(ga.font, scorestr.c_str(), sz, 1.0);
+        auto meas = MeasureTextEx(gs.ga.p->font, scorestr.c_str(), sz, 1.0);
         auto txtPos1prv = Vector2{TILE_RADIUS * 2.0f + (GetScreenWidth() - TILE_RADIUS * 6.0f) * 0.25f - meas.x * 0.5f, GetScreenHeight() - TILE_RADIUS - meas.y * 0.5f};
-        auto txtPos2prv = Vector2{GetScreenWidth() - TILE_RADIUS * 2.0f - (GetScreenWidth() - TILE_RADIUS * 6.0f) * 0.25f - meas.x * 0.5f, GetScreenHeight() - TILE_RADIUS - meas.y * 0.5f};
+        auto scorestr2 = "x" + std::to_string(gs.combo);
         auto txtPosnew = Vector2{GetScreenWidth() * 0.5f - meas.x * 0.5f, GetScreenHeight() * 0.5f - meas.y * 0.5f};
+        meas = MeasureTextEx(gs.ga.p->font, scorestr2.c_str(), getTextSize(gs), 1.0);
+        auto txtPos2prv = Vector2{GetScreenWidth() - TILE_RADIUS * 2.0f - (GetScreenWidth() - TILE_RADIUS * 6.0f) * 0.25f - meas.x * 0.5f, GetScreenHeight() - TILE_RADIUS - meas.y * 0.5f};
 
-        drawText(ga, scorestr, txtPos1prv + (txtPosnew - txtPos1prv) * coeff, PINK);
-        drawText(ga, scorestr, txtPos2prv + (txtPosnew - txtPos2prv) * coeff, PINK);
-        drawTile(ga, {2, 4}, {GetScreenWidth() * 0.5f, GetScreenHeight() * 1.25f - coeff * GetScreenHeight() * 0.5f}, WHITE, {TILE_SIZE, TILE_SIZE + 1});
+        drawText(gs, scorestr, txtPos1prv + (txtPosnew - txtPos1prv) * coeff, PINK);
+        //drawText(scorestr, txtPos2prv + (txtPosnew - txtPos2prv) * coeff, PINK);
+        drawText(gs, scorestr2, txtPos2prv + Vector2{0, TILE_RADIUS} * 2.0f * coeff, COMBO_COLORS[gs.combo - 1]);
+        drawTile(gs, {2, 4}, {GetScreenWidth() * 0.5f, GetScreenHeight() * 1.25f - coeff * GetScreenHeight() * 0.5f}, WHITE, {TILE_SIZE, TILE_SIZE + 1});
     }
 
-    void drawBottom(const GameAssets& ga, const GameState& gs) 
+    void drawBottom(const GameState& gs) 
     {
         float startCoeff = easeOutQuad(std::clamp((getTime(gs) - gs.gameStartTime)/GAME_START_TIME, 0.0, 1.0));
 
@@ -941,7 +1013,7 @@ extern "C" {
         if (startCoeff < 1.0f) rearmCoeff = 1.0f;
         
         float gameOverCoeff = gs.gameOver ? easeOutQuad(std::clamp((getTime(gs) - gs.gameOverTime)/GAME_OVER_TIMEOUT, 0.0, 1.0)) : 0.0f;
-        DrawCircleV(gunPos + gameOverCoeff * Vector2{0, TILE_RADIUS * 3.0f}, TILE_RADIUS + TILE_RADIUS * 0.2f, WHITE);
+        DrawCircleV(gunPos + gameOverCoeff * Vector2{0, TILE_RADIUS * 3.0f}, TILE_RADIUS + TILE_RADIUS * 0.2f, COMBO_COLORS[gs.combo - 1]);
         DrawCircleV(extraPos + gameOverCoeff * Vector2{-TILE_RADIUS * 3.0f, 0}, TILE_RADIUS + TILE_RADIUS * 0.2f, DARKGRAY);
 
         if (!gs.gameOver) {
@@ -953,21 +1025,25 @@ extern "C" {
                 float dir = gs.gun.dir + PI * 0.5f;
                 for (int i = 0; i < NTICKS; ++i) {
                     pos += TICKSTEP * Vector2{cos(dir), -sin(dir)};
-                    DrawCircleV(pos, 3, WHITE);
+                    DrawCircleV(pos, 3, COMBO_COLORS[gs.combo - 1]);
                 }
             }
             auto pt = GetSplinePointBezierQuad(nextPos, (nextPos + gunPos) * 0.5f - Vector2{0, 2.0f * TILE_RADIUS}, gunPos, rearmCoeff);
             auto pt2 = GetSplinePointBezierQuad(extraPos, (extraPos + gunPos) * 0.5f + Vector2{0, -2.0f * TILE_RADIUS}, gunPos, swapCoeff);
-            drawThing(ga, gs, (swapCoeff == 1.0f || gs.gun.firstSwap) ? pt : pt2, gs.gun.armed);
+            drawThing(gs, (swapCoeff == 1.0f || gs.gun.firstSwap) ? pt : pt2, gs.gun.armed);
 
-            drawThing(ga, gs, nextNextPos + (nextPos - nextNextPos) * rearmCoeff, gs.gun.next);
+            drawThing(gs, nextNextPos + (nextPos - nextNextPos) * rearmCoeff, gs.gun.next);
 
             if (gs.gun.extraArmed)
-                drawThing(ga, gs, gunPos + (extraPos - gunPos) * swapCoeff, gs.gun.extra);
-            auto scorestr = gs.alteredDifficulty ? ("\"" + std::to_string(gs.score) + "\"") : std::to_string(gs.score);
-            auto meas = MeasureTextEx(ga.font, scorestr.c_str(), getTextSize(ga), 1.0);
-            drawText(ga, scorestr, {TILE_RADIUS * 2.0f + (GetScreenWidth() - TILE_RADIUS * 6.0f) * 0.25f - meas.x * 0.5f - (1.0f - startCoeff) * TILE_RADIUS * 2.0f, GetScreenHeight() - TILE_RADIUS - meas.y * 0.5f + (1.0f - startCoeff) * TILE_RADIUS * 2.0f}, GRAY);
-            drawText(ga, scorestr, {GetScreenWidth() - TILE_RADIUS * 2.0f - (GetScreenWidth() - TILE_RADIUS * 6.0f) * 0.25f - meas.x * 0.5f + (1.0f - startCoeff) * TILE_RADIUS * 2.0f, GetScreenHeight() - TILE_RADIUS - meas.y * 0.5f + (1.0f - startCoeff) * TILE_RADIUS * 2.0f}, GRAY);
+                drawThing(gs, gunPos + (extraPos - gunPos) * swapCoeff, gs.gun.extra);
+            auto scorestr = gs.alteredDifficulty ? ("\"" + std::to_string(gs.tmp.visScore) + "\"") : std::to_string(gs.tmp.visScore);
+            auto meas = MeasureTextEx(gs.ga.p->font, scorestr.c_str(), getTextSize(gs), 1.0);
+            drawText(gs, scorestr, {TILE_RADIUS * 2.0f + (GetScreenWidth() - TILE_RADIUS * 6.0f) * 0.25f - meas.x * 0.5f - (1.0f - startCoeff) * TILE_RADIUS * 2.0f, GetScreenHeight() - TILE_RADIUS - meas.y * 0.5f + (1.0f - startCoeff) * TILE_RADIUS * 2.0f}, PINK);
+            auto scorestr2 = "x" + std::to_string(gs.combo);
+            meas = MeasureTextEx(gs.ga.p->font, scorestr2.c_str(), getTextSize(gs), 1.0);
+            drawText(gs, scorestr2, {GetScreenWidth() - TILE_RADIUS * 2.0f - (GetScreenWidth() - TILE_RADIUS * 6.0f) * 0.25f - meas.x * 0.5f + (1.0f - startCoeff) * TILE_RADIUS * 2.0f, GetScreenHeight() - TILE_RADIUS - meas.y * 0.5f + (1.0f - startCoeff) * TILE_RADIUS * 2.0f}, COMBO_COLORS[gs.combo - 1]);
+
+            bool warning = false;
 
             for (int i = 0; i < BOARD_HEIGHT; ++i) {
                 for (int j = 0; j < BOARD_WIDTH - ((i + gs.board.even) % 2); ++j) {
@@ -976,17 +1052,23 @@ extern "C" {
                         Vector2 tpos = getPixByPos(gs, {i, j});
                         float h = (GetScreenHeight() - 2 * TILE_RADIUS) - (tpos.y + TILE_RADIUS);
                         if (h < ROW_HEIGHT * 2) {
-                            drawTile(ga, {2, 0}, {tpos.x, GetScreenHeight() - TILE_RADIUS - 3.0f * TILE_PIXEL}, WHITE, {3 * TILE_SIZE, TILE_SIZE});
-                            if (h < ROW_HEIGHT * 1)
-                                drawTile(ga, {2, 3}, {tpos.x, GetScreenHeight() - TILE_RADIUS}, (int(floor(getTime(gs) * 10)) % 2 == 0) ? WHITE : BLANK);
+                            drawTile(gs, {2, 0}, {tpos.x, GetScreenHeight() - TILE_RADIUS - 3.0f * TILE_PIXEL}, WHITE, {3 * TILE_SIZE, TILE_SIZE});
+                            if (h < ROW_HEIGHT * 1) {
+                                drawTile(gs, {2, 3}, {tpos.x, GetScreenHeight() - TILE_RADIUS}, (int(floor(getTime(gs) * 10)) % 2 == 0) ? WHITE : BLANK);
+                                warning = true;
+                            }
                         }
                     }
                 }
             }
+
+            if (warning && (int(floor(getTime(gs) * 10)) % 2 == 0) && (getTime(gs) - gs.tmp.lastWarnSnd > 0.1)) {
+                playSound(gs, gs.ga.p->beep);
+            }
         }
     }
 
-    void updateSettingsButton(const GameAssets& ga, GameState& gs) {
+    void updateSettingsButton(GameState& gs) {
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && Vector2DistanceSqr({(float)GetScreenWidth(), 0.0f}, GetMousePosition()) < TILE_RADIUS * TILE_RADIUS * 4 * 2.0f) {
             gs.settingsOpened = !gs.settingsOpened;
             gs.inputTimeoutTime = getTime(gs);
@@ -996,68 +1078,67 @@ extern "C" {
 
     }
 
-    void drawSettingsButton(const GameAssets& ga, const GameState& gs) {
-        drawTile(ga, {3, (gs.settingsOpened ? 7 : 6)}, {GetScreenWidth() - TILE_RADIUS, TILE_RADIUS});
+    void drawSettingsButton(const GameState& gs) {
+        drawTile(gs, {3, (gs.settingsOpened ? 7 : 6)}, {GetScreenWidth() - TILE_RADIUS, TILE_RADIUS});
     }
 
-    void draw(const GameAssets& ga, const GameState& gs) {        
+    void draw(const GameState& gs) {        
         if (IsWindowFocused()) {
-            drawBoard(ga, gs);
+            drawBoard(gs);
             if (gs.gameOver)
-                drawGameOver(ga, gs);
-            drawBottom(ga, gs);
-            drawParticles(ga, gs);
+                drawGameOver(gs);
+            drawBottom(gs);
+            drawAnimations(gs);
+            drawScorePoints(gs);
+            drawParticles(gs);
             if (gs.bullet.exists)
-                drawBullet(ga, gs);
+                drawBullet(gs);
         }
     }
 
-    void updateAndDrawSettings(const GameAssets& ga, GameState& gs) 
+    void updateAndDrawSettings(GameState& gs) 
     {
         auto prvusr = gs.usr;
         
-        updateMusic(ga, gs);
+        updateMusic(gs);
         
         auto sndPos = Vector2{(float)int(GetScreenWidth() * 0.333f), (float)int(GetScreenHeight() * 0.25f)};
         auto musPos = Vector2{(float)int(GetScreenWidth() * 0.666f), (float)int(GetScreenHeight() * 0.25f)};
-        drawTile(ga, {3, 2}, sndPos);
+        drawTile(gs, {3, 2}, sndPos);
         if (!gs.usr.sndEnabled) 
-            drawTile(ga, {3, 3}, sndPos);
+            drawTile(gs, {3, 3}, sndPos);
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && Vector2DistanceSqr(sndPos, GetMousePosition()) < TILE_RADIUS * TILE_RADIUS)
             gs.usr.sndEnabled = !gs.usr.sndEnabled;
-        drawTile(ga, {3, 5}, musPos);
+        drawTile(gs, {3, 5}, musPos);
         if (!gs.usr.musEnabled)
-            drawTile(ga, {3, 3}, musPos);
+            drawTile(gs, {3, 3}, musPos);
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && Vector2DistanceSqr(musPos, GetMousePosition()) < TILE_RADIUS * TILE_RADIUS)
             gs.usr.musEnabled = !gs.usr.musEnabled;
 
         auto movPos = Vector2{(float)int(GetScreenWidth() * 0.333f) - TILE_RADIUS * 2.0f, (float)int(GetScreenHeight() * 0.25f + TILE_RADIUS * 4.0f)};
-        drawTile(ga, {3, (gs.usr.velEnabled ? 1 : 0)}, movPos);
-        drawText(ga, "board movement", movPos + Vector2{TILE_RADIUS * 1.5f, -TILE_RADIUS + TILE_PIXEL * 2.0f}, WHITE);
+        drawTile(gs, {3, (gs.usr.velEnabled ? 1 : 0)}, movPos);
+        drawText(gs, "board movement", movPos + Vector2{TILE_RADIUS * 1.5f, -TILE_RADIUS + TILE_PIXEL * 2.0f}, WHITE);
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && abs(movPos.y - GetMousePosition().y) < TILE_RADIUS) {
             gs.usr.velEnabled = !gs.usr.velEnabled;
             if (!gs.usr.velEnabled) gs.usr.accEnabled = false;
         }
         auto accPos = movPos + Vector2{0, TILE_RADIUS * 3.0f};
-        drawTile(ga, {3, (gs.usr.accEnabled ? 1 : 0)}, accPos);
-        drawText(ga, "acceleration", accPos + Vector2{TILE_RADIUS * 1.5f, -TILE_RADIUS + TILE_PIXEL * 2.0f}, WHITE);
+        drawTile(gs, {3, (gs.usr.accEnabled ? 1 : 0)}, accPos);
+        drawText(gs, "acceleration", accPos + Vector2{TILE_RADIUS * 1.5f, -TILE_RADIUS + TILE_PIXEL * 2.0f}, WHITE);
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && abs(accPos.y - GetMousePosition().y) < TILE_RADIUS)
             gs.usr.accEnabled = !gs.usr.accEnabled;
         auto colPos = accPos + Vector2{0, TILE_RADIUS * 3.0f};
-        drawTile(ga, {3, ((gs.usr.n_params == 1) ? 1 : 0)}, colPos);
-        drawText(ga, "color only", colPos + Vector2{TILE_RADIUS * 1.5f, -TILE_RADIUS + TILE_PIXEL * 2.0f}, WHITE);
+        drawTile(gs, {3, ((gs.usr.n_params == 1) ? 1 : 0)}, colPos);
+        drawText(gs, "color only", colPos + Vector2{TILE_RADIUS * 1.5f, -TILE_RADIUS + TILE_PIXEL * 2.0f}, WHITE);
         if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && abs(colPos.y - GetMousePosition().y) < TILE_RADIUS)
             gs.usr.n_params = (gs.usr.n_params == 1) ? 2 : 1;
-
-
         if (prvusr != gs.usr)
             saveUserData(gs);
-
-            updateSettingsButton(ga, gs);
-        drawSettingsButton(ga, gs);
+        updateSettingsButton(gs);
+        drawSettingsButton(gs);
     }
 
-    DLL_EXPORT void updateAndDraw(const GameAssets& ga, GameState& gs) 
+    DLL_EXPORT void updateAndDraw(GameState& gs) 
     {
         if (!gs.tmp.timeOffsetSet) {
             if (gs.time == 0) gs.time = GetTime();
@@ -1071,26 +1152,27 @@ extern "C" {
         BeginTextureMode(gs.tmp.renderTex);
         ClearBackground(BLACK);        
         if (gs.settingsOpened) {
-            updateAndDrawSettings(ga, gs);
+            updateAndDrawSettings(gs);
         } else {
-            updateSettingsButton(ga, gs);
+            updateSettingsButton(gs);
             if (IsWindowFocused()) {                            
                 if (gs.inputTimeoutTime == 0)
                     gs.inputTimeoutTime = getTime(gs);
                 if (getTime(gs) - gs.inputTimeoutTime > INPUT_TIMEOUT && getFrameTime(gs) < 1.0) {
                     for (int i = 0; i < UPDATE_ITS; ++i)
-                        update(ga, gs);
-                    updateOnce(ga, gs);
+                        update(gs);
+                    updateOnce(gs);
                 }
                 flyParticles(gs);
+                flyScorePoints(gs);
                 checkDrops(gs);
                 checkAnimations(gs);
-                updateMusic(ga, gs);
+                updateMusic(gs);
             } else  {
                 gs.inputTimeoutTime = 0;
             }            
-            draw(ga, gs);
-            drawSettingsButton(ga, gs);
+            draw(gs);
+            drawSettingsButton(gs);
         }
         EndTextureMode();
 
@@ -1099,16 +1181,16 @@ extern "C" {
         
         gs.tmp.shTime = getTime(gs);
         gs.tmp.shScreenSize = {(float)GetScreenWidth(), (float)GetScreenHeight()};
-        SetShaderValue(ga.postProcFragShader, GetShaderLocation(ga.postProcFragShader, "time"), &gs.tmp.shTime, SHADER_UNIFORM_FLOAT);
-        SetShaderValue(ga.postProcFragShader, GetShaderLocation(ga.postProcFragShader, "screenSize"), &gs.tmp.shScreenSize, SHADER_UNIFORM_VEC2);
-        SetShaderValue(ga.postProcFragShader, GetShaderLocation(ga.postProcFragShader, "nDrops"), &gs.tmp.shNDrops, SHADER_UNIFORM_UINT);
+        SetShaderValue(gs.ga.p->postProcFragShader, GetShaderLocation(gs.ga.p->postProcFragShader, "time"), &gs.tmp.shTime, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(gs.ga.p->postProcFragShader, GetShaderLocation(gs.ga.p->postProcFragShader, "screenSize"), &gs.tmp.shScreenSize, SHADER_UNIFORM_VEC2);
+        SetShaderValue(gs.ga.p->postProcFragShader, GetShaderLocation(gs.ga.p->postProcFragShader, "nDrops"), &gs.tmp.shNDrops, SHADER_UNIFORM_UINT);
         if (gs.tmp.shNDrops) {
-            SetShaderValueV(ga.postProcFragShader, GetShaderLocation(ga.postProcFragShader, "dropTimes"), gs.tmp.shDropTimes.data(), SHADER_UNIFORM_FLOAT, gs.tmp.shNDrops);
-            SetShaderValueV(ga.postProcFragShader, GetShaderLocation(ga.postProcFragShader, "dropCenters"), gs.tmp.shDropCenters.data(), SHADER_UNIFORM_VEC2, gs.tmp.shNDrops);
+            SetShaderValueV(gs.ga.p->postProcFragShader, GetShaderLocation(gs.ga.p->postProcFragShader, "dropTimes"), gs.tmp.shDropTimes.data(), SHADER_UNIFORM_FLOAT, gs.tmp.shNDrops);
+            SetShaderValueV(gs.ga.p->postProcFragShader, GetShaderLocation(gs.ga.p->postProcFragShader, "dropCenters"), gs.tmp.shDropCenters.data(), SHADER_UNIFORM_VEC2, gs.tmp.shNDrops);
         }
 
         BeginDrawing();
-        BeginShaderMode(ga.postProcFragShader);
+        BeginShaderMode(gs.ga.p->postProcFragShader);
         DrawTextureRec(gs.tmp.renderTex.texture, Rectangle{0, 0, (float)gs.tmp.renderTex.texture.width, (float)-gs.tmp.renderTex.texture.height}, Vector2Zero(), WHITE);
         EndShaderMode();
         EndDrawing();

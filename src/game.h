@@ -41,6 +41,7 @@ struct Board {
     double moveTime, totalMoveTime;
     Arena<MAX_TODROP, ThingPos> todrop;
     Arena<MAX_TODROP, ThingPos> uncon;
+    uint8_t lastDropCombo = 1;
 };
 
 struct Gun {
@@ -66,11 +67,19 @@ struct Particle {
     uint8_t maskId2;
 };
 
+struct ScorePoint {
+    Vector2 spawnPos, cpPos, endPos;
+    double spawnTime, flyTime;
+    Color col;
+    bool done = false;
+};
+
 struct Animation {
     const Texture2D* tex;
     double startTime;
     double interval;
     Vector2 pos;
+    Color col;
     bool done = false;
 };
 
@@ -93,10 +102,14 @@ struct GameAssets {
     Font font;
     Music music;
     Sound clang[3];
+    Sound pop[3];
     Sound sndexp;
-    Sound shatter;
+    Sound shatter[2];
     Sound whoosh[2];
     Sound sizzle;
+    Sound fail;
+    Sound shake;
+    Sound beep;
     Shader postProcFragShader;
     Shader maskFragShader;
 };
@@ -133,8 +146,10 @@ struct GameState {
         DO_NOT_SERIALIZE
         Arena<MAX_PARTICLES, Particle> particles;
         Arena<MAX_PARTICLES, Animation> animations;
+        Arena<MAX_PARTICLES, ScorePoint> scorePoints;
         bool timeOffsetSet = false;
         double timeOffset;
+        int visScore = 0;
         RenderTexture2D renderTex;
         uint32_t shNDrops = 0;
         float shTime;
@@ -144,13 +159,19 @@ struct GameState {
         std::array<Vector2, 128> shDropCenters;
         Vector2 shMaskTilePos;
         uint32_t shMaskId;
+        double lastScoreSnd;
+        double lastWarnSnd;
     } tmp;
+    struct AssetsPtr {
+        DO_NOT_SERIALIZE
+        const GameAssets* p;
+    } ga;
 };
 
 #ifndef GAME_BASE_DLL
 extern "C" {
     void init(GameAssets& ga, GameState& gs);
     void setState(GameState& gs, const GameState& ngs);
-    void updateAndDraw(const GameAssets& ga, GameState& gs);
+    void updateAndDraw(GameState& gs);
 }
 #endif

@@ -42,7 +42,8 @@
 #define SHAKE_TIME BULLET_REBOUNCE_TIME
 #define MAX_SHAKE 0.25f
 #define GRAVITY 2500.0f
-#define COLORS std::array<Color, 5>{ RED, GREEN, BLUE, ORANGE, PINK }
+#define COLORS std::array<Color, 5>{ RED, GREEN, BLUE, GOLD, PINK }
+#define COMBO_COLORS std::array<Color, 5>{ WHITE, GREEN, YELLOW, ORANGE, RED }
 #define TOGOI std::vector<int>{1, 0, 3, 2, 5, 4}
 #define TOGO std::vector<ThingPos>{{pos.row, pos.col + 1}, {pos.row, pos.col - 1}, {pos.row - 1, pos.col}, {pos.row + 1, pos.col}, {pos.row - 1, ((pos.row + gs.board.even) % 2) ? (pos.col + 1) : (pos.col - 1)}, {pos.row + 1, ((pos.row + gs.board.even) % 2) ? (pos.col + 1) : (pos.col - 1)}}
 #ifdef PLATFORM_ANDROID
@@ -53,7 +54,11 @@
 #define REARM_TIMEOUT 0.25f
 #define N_TO_DROP 4
 #define WAVE_FADE_TIME 1.0f
-#define BOMB_PROB 0.04f
+#define BOMB_PROB 0.03f
 #define BOMB_TRIGGER_TIME 0.5f
 #define EXPLOSION_TIME 0.4f
 #define SPLASH_TIME 0.2f
+#define MAX_COMBO 5
+#define SCORE_FLY_TIME 0.5f
+#define SCORE_FLY_SPREAD 0.25f
+#define SCORE_SND_CD 0.01f
