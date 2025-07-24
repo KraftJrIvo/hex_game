@@ -15,46 +15,22 @@ add_compile_definitions(_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS)
 add_compile_definitions(_SILENCE_ALL_CXX20_DEPRECATION_WARNINGS)
 add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 
-project(HEX_GAME VERSION 0.0.1 DESCRIPTION "raylib game base" LANGUAGES CXX C)
+project(HEX_GAME VERSION 0.0.1 DESCRIPTION "raylib hex game for game base" LANGUAGES CXX C)
 
-add_executable(embedfile "src/util/embedfile.c")
-add_custom_command(OUTPUT res_tiles.c COMMAND embedfile res_tiles ${HEX_GAME_SOURCE_DIR}/res/tiles.png DEPENDS ${HEX_GAME_SOURCE_DIR}/res/tiles.png)
-add_custom_command(OUTPUT res_explosion.c COMMAND embedfile res_explosion ${HEX_GAME_SOURCE_DIR}/res/explosion.png DEPENDS ${HEX_GAME_SOURCE_DIR}/res/explosion.png)
-add_custom_command(OUTPUT res_splash.c COMMAND embedfile res_splash ${HEX_GAME_SOURCE_DIR}/res/splash.png DEPENDS ${HEX_GAME_SOURCE_DIR}/res/splash.png)
-add_custom_command(OUTPUT res_font.c COMMAND embedfile res_font ${HEX_GAME_SOURCE_DIR}/res/cozette.otf DEPENDS ${HEX_GAME_SOURCE_DIR}/res/cozette.otf)
-add_custom_command(OUTPUT res_music.c COMMAND embedfile res_music ${HEX_GAME_SOURCE_DIR}/res/music.ogg DEPENDS ${HEX_GAME_SOURCE_DIR}/res/music.ogg)
-add_custom_command(OUTPUT res_clang0.c COMMAND embedfile res_clang0 ${HEX_GAME_SOURCE_DIR}/res/clang0.ogg DEPENDS ${HEX_GAME_SOURCE_DIR}/res/clang0.ogg)
-add_custom_command(OUTPUT res_clang1.c COMMAND embedfile res_clang1 ${HEX_GAME_SOURCE_DIR}/res/clang1.ogg DEPENDS ${HEX_GAME_SOURCE_DIR}/res/clang1.ogg)
-add_custom_command(OUTPUT res_clang2.c COMMAND embedfile res_clang2 ${HEX_GAME_SOURCE_DIR}/res/clang2.ogg DEPENDS ${HEX_GAME_SOURCE_DIR}/res/clang2.ogg)
-add_custom_command(OUTPUT res_sndexp.c COMMAND embedfile res_sndexp ${HEX_GAME_SOURCE_DIR}/res/sndexp.ogg DEPENDS ${HEX_GAME_SOURCE_DIR}/res/sndexp.ogg)
-add_custom_command(OUTPUT res_shatter.c COMMAND embedfile res_shatter ${HEX_GAME_SOURCE_DIR}/res/shatter.ogg DEPENDS ${HEX_GAME_SOURCE_DIR}/res/shatter.ogg)
-add_custom_command(OUTPUT res_whoosh0.c COMMAND embedfile res_whoosh0 ${HEX_GAME_SOURCE_DIR}/res/whoosh0.ogg DEPENDS ${HEX_GAME_SOURCE_DIR}/res/whoosh0.ogg)
-add_custom_command(OUTPUT res_whoosh1.c COMMAND embedfile res_whoosh1 ${HEX_GAME_SOURCE_DIR}/res/whoosh1.ogg DEPENDS ${HEX_GAME_SOURCE_DIR}/res/whoosh1.ogg)
-add_custom_command(OUTPUT res_sizzle.c COMMAND embedfile res_sizzle ${HEX_GAME_SOURCE_DIR}/res/sizzle.ogg DEPENDS ${HEX_GAME_SOURCE_DIR}/res/sizzle.ogg)
-add_custom_command(OUTPUT res_mskfs.c COMMAND embedfile res_mskfs ${HEX_GAME_SOURCE_DIR}/res/mask.fs DEPENDS ${HEX_GAME_SOURCE_DIR}/res/mask.fs)
-add_custom_command(OUTPUT res_ppfs.c COMMAND embedfile res_ppfs ${HEX_GAME_SOURCE_DIR}/res/post_proc.fs DEPENDS ${HEX_GAME_SOURCE_DIR}/res/post_proc.fs)
+include(../cmake/EmbedResources.cmake)
+if(NOT TARGET embedfile)
+    add_executable(embedfile "../src/util/embedfile.c")
+endif()
+embed_resources("${HEX_GAME_SOURCE_DIR}/res" EMBEDDED_SOURCES EXCLUDE_EXTENSIONS ".rc" ".ico" ".txt")
 
 # TARGET
 set(GAME_SOURCE_FILES    
   "src/game.cpp"
-  res_tiles.c
-  res_explosion.c
-  res_splash.c
-  res_font.c
-  res_music.c
-  res_clang0.c
-  res_clang1.c
-  res_clang2.c
-  res_sndexp.c
-  res_shatter.c
-  res_whoosh0.c
-  res_whoosh1.c
-  res_sizzle.c
-  res_mskfs.c
-  res_ppfs.c
+  ${EMBEDDED_SOURCES}
 )
 if (GAME_BASE_SHARED_BUILD)
   add_library(GAME_NEW SHARED ${GAME_SOURCE_FILES})
+  target_include_directories(GAME_NEW PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
   target_compile_definitions(GAME_NEW PRIVATE GAME_BASE_DLL)
   add_custom_command(TARGET GAME_NEW
     POST_BUILD
@@ -63,6 +39,7 @@ if (GAME_BASE_SHARED_BUILD)
   )
 else()
   add_library(GAME ${GAME_SOURCE_FILES})
+  target_include_directories(GAME PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 endif()
 
 # DEPENDENCIES

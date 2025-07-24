@@ -53,7 +53,7 @@
 #define REARM_TIMEOUT 0.25f
 #define N_TO_DROP 4
 #define WAVE_FADE_TIME 1.0f
-#define BOMB_PROB 0.1f
+#define BOMB_PROB 0.04f
 #define BOMB_TRIGGER_TIME 0.5f
 #define EXPLOSION_TIME 0.4f
 #define SPLASH_TIME 0.2f

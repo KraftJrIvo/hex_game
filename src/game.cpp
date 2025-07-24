@@ -12,34 +12,7 @@
 #include <string>
 #include <vector>
 
-extern "C" const unsigned char res_tiles[];
-extern "C" const size_t        res_tiles_len;
-extern "C" const unsigned char res_explosion[];
-extern "C" const size_t        res_explosion_len;
-extern "C" const unsigned char res_splash[];
-extern "C" const size_t        res_splash_len;
-extern "C" const unsigned char res_font[];
-extern "C" const size_t        res_font_len;
-extern "C" const unsigned char res_music[];
-extern "C" const size_t        res_music_len;
-extern "C" const unsigned char res_clang0[];
-extern "C" const size_t        res_clang0_len;
-extern "C" const unsigned char res_clang1[];
-extern "C" const size_t        res_clang1_len;
-extern "C" const unsigned char res_clang2[];
-extern "C" const size_t        res_clang2_len;
-extern "C" const unsigned char res_sndexp[];
-extern "C" const size_t        res_sndexp_len;
-extern "C" const unsigned char res_shatter[];
-extern "C" const size_t        res_shatter_len;
-extern "C" const unsigned char res_whoosh0[];
-extern "C" const size_t        res_whoosh0_len;
-extern "C" const unsigned char res_whoosh1[];
-extern "C" const size_t        res_whoosh1_len;
-extern "C" const unsigned char res_sizzle[];
-extern "C" const size_t        res_sizzle_len;
-extern "C" const unsigned char res_ppfs[];
-extern "C" const unsigned char res_mskfs[];
+#include "resources.h"
 
 #if (defined(_WIN32) || defined(_WIN64)) && defined(GAME_BASE_DLL)
 #define DLL_EXPORT __declspec(dllexport)
@@ -257,27 +230,27 @@ extern "C" {
     }
 
     void loadAssets(GameAssets& ga) {
-        ga.tiles = LoadTextureFromImage(LoadImageFromMemory(".png", res_tiles, res_tiles_len));
-        ga.explosion = LoadTextureFromImage(LoadImageFromMemory(".png", res_explosion, res_explosion_len));
-        ga.splash = LoadTextureFromImage(LoadImageFromMemory(".png", res_splash, res_splash_len));
+        ga.tiles = LoadTextureFromImage(LoadImageFromMemory(".png", res_tiles_png, res_tiles_png_len));
+        ga.explosion = LoadTextureFromImage(LoadImageFromMemory(".png", res_explosion_png, res_explosion_png_len));
+        ga.splash = LoadTextureFromImage(LoadImageFromMemory(".png", res_splash_png, res_splash_png_len));
 
-        ga.music = LoadMusicStreamFromMemory(".ogg", res_music, res_music_len);
+        ga.music = LoadMusicStreamFromMemory(".ogg", res_music_ogg, res_music_ogg_len);
 
-        ga.clang[0] = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_clang0, res_clang0_len));
-        ga.clang[1] = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_clang1, res_clang1_len));
-        ga.clang[2] = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_clang2, res_clang2_len));
-        ga.sndexp = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_sndexp, res_sndexp_len));
-        ga.shatter = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_shatter, res_shatter_len));
-        ga.whoosh[0] = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_whoosh0, res_whoosh0_len));
-        ga.whoosh[1] = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_whoosh1, res_whoosh1_len));
-        ga.sizzle = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_sizzle, res_sizzle_len));
+        ga.clang[0] = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_clang0_ogg, res_clang0_ogg_len));
+        ga.clang[1] = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_clang1_ogg, res_clang1_ogg_len));
+        ga.clang[2] = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_clang2_ogg, res_clang2_ogg_len));
+        ga.sndexp = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_sndexp_ogg, res_sndexp_ogg_len));
+        ga.shatter = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_shatter_ogg, res_shatter_ogg_len));
+        ga.whoosh[0] = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_whoosh0_ogg, res_whoosh0_ogg_len));
+        ga.whoosh[1] = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_whoosh1_ogg, res_whoosh1_ogg_len));
+        ga.sizzle = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_sizzle_ogg, res_sizzle_ogg_len));
 
-        ga.postProcFragShader = LoadShaderFromMemory(NULL, (const char*)res_ppfs);
-        ga.maskFragShader = LoadShaderFromMemory(NULL, (const char*)res_mskfs);
+        ga.postProcFragShader = LoadShaderFromMemory(NULL, (const char*)res_post_proc_fs);
+        ga.maskFragShader = LoadShaderFromMemory(NULL, (const char*)res_mask_fs);
 
         char8_t _allChars[228] = u8" !\"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ";
         int c; auto cdpts = LoadCodepoints((const char*)_allChars, &c);
-        ga.font = LoadFontFromMemory(".ttf", res_font, res_font_len, 39, cdpts, c);
+        ga.font = LoadFontFromMemory(".ttf", res_font_otf, res_font_otf_len, 39, cdpts, c);
     }
 
     DLL_EXPORT void saveUserData(const GameState& gs) {
