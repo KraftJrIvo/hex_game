@@ -19,7 +19,7 @@
 #define BOARD_CONST_SPEED 3.0f
 #define BOARD_ACC 0.01f
 #define RAND_FLOAT static_cast <float> (rand()) / (static_cast <float> (RAND_MAX) + 1.0f)
-#define RAND_FLOAT_SIGNED (2.0f * RAND_FLOAT - 0.5f)
+#define RAND_FLOAT_SIGNED (2.0f * RAND_FLOAT - 1.0f)
 #define RAND_FLOAT_SIGNED_2D Vector2{RAND_FLOAT_SIGNED, RAND_FLOAT_SIGNED}
 #define UPDATE_ITS  5
 #define ROW_HEIGHT (float)(TILE_RADIUS * sqrt(3))
@@ -52,3 +52,8 @@
 #endif
 #define REARM_TIMEOUT 0.25f
 #define N_TO_DROP 4
+#define WAVE_FADE_TIME 1.0f
+#define BOMB_PROB 0.1f
+#define BOMB_TRIGGER_TIME 0.5f
+#define EXPLOSION_TIME 0.4f
+#define SPLASH_TIME 0.2f

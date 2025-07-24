@@ -1,9 +1,11 @@
 #include "game.h"
 #include "raylib.h"
+#include "rlgl.h"
 
 #include "util/vec_ops.h"
 #include "raymath.h"
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <algorithm>
 #include <map>
@@ -12,16 +14,54 @@
 
 extern "C" const unsigned char res_tiles[];
 extern "C" const size_t        res_tiles_len;
+extern "C" const unsigned char res_explosion[];
+extern "C" const size_t        res_explosion_len;
+extern "C" const unsigned char res_splash[];
+extern "C" const size_t        res_splash_len;
 extern "C" const unsigned char res_font[];
 extern "C" const size_t        res_font_len;
 extern "C" const unsigned char res_music[];
 extern "C" const size_t        res_music_len;
+extern "C" const unsigned char res_clang0[];
+extern "C" const size_t        res_clang0_len;
+extern "C" const unsigned char res_clang1[];
+extern "C" const size_t        res_clang1_len;
+extern "C" const unsigned char res_clang2[];
+extern "C" const size_t        res_clang2_len;
+extern "C" const unsigned char res_sndexp[];
+extern "C" const size_t        res_sndexp_len;
+extern "C" const unsigned char res_shatter[];
+extern "C" const size_t        res_shatter_len;
+extern "C" const unsigned char res_whoosh0[];
+extern "C" const size_t        res_whoosh0_len;
+extern "C" const unsigned char res_whoosh1[];
+extern "C" const size_t        res_whoosh1_len;
+extern "C" const unsigned char res_sizzle[];
+extern "C" const size_t        res_sizzle_len;
+extern "C" const unsigned char res_ppfs[];
+extern "C" const unsigned char res_mskfs[];
 
 #if (defined(_WIN32) || defined(_WIN64)) && defined(GAME_BASE_DLL)
 #define DLL_EXPORT __declspec(dllexport)
 #else
 #define DLL_EXPORT
 #endif
+
+bool checkBounds(const GameState& gs, const ThingPos& pos) {
+    return (pos.row >= 0 && pos.row < BOARD_HEIGHT && pos.col >= 0 && pos.col < (((pos.row + gs.board.even) % 2) ? (BOARD_WIDTH - 1) : (BOARD_WIDTH)));
+}
+
+Tile& getTile(GameState& gs, const ThingPos& pos) {
+    return gs.board.things[pos.row][pos.col];
+}
+
+std::vector<ThingPos> getNeighs(GameState& gs, const ThingPos& pos) {
+    std::vector<ThingPos> res;
+    for (int i = 0; i < 6; ++i)
+        if (checkBounds(gs, TOGO[i]))
+            res.push_back(TOGO[i]);
+    return res;
+}
 
 extern "C" {
 
@@ -31,11 +71,16 @@ extern "C" {
     }
 
     double getTime(const GameState& gs) {
-        return GetTime() + gs.tmp.timeOffset;
+        return (GetTime() + gs.tmp.timeOffset);// * 0.5f;
     }
 
-    bool checkBounds(const GameState& gs, const ThingPos& pos) {
-        return (pos.row >= 0 && pos.row < BOARD_HEIGHT && pos.col >= 0 && pos.col < (((pos.row + gs.board.even) % 2) ? (BOARD_WIDTH - 1) : (BOARD_WIDTH)));
+    float getFrameTime(const GameState& gs) {
+        return GetFrameTime();// * 0.5f;
+    }
+
+    void playSound(const GameAssets& ga, const GameState& gs, const Sound& snd) {
+        if (gs.usr.sndEnabled)
+            PlaySound(snd);
     }
 
     float easeOutBounce(float x) 
@@ -85,7 +130,7 @@ extern "C" {
         bool keep = true;
         for (int row = BOARD_HEIGHT - 1; row >= 0; --row) {
             for (int col = 0; col < BOARD_WIDTH - ((row + gs.board.even) % 2); ++col) {
-                if (gs.board.things[row][col].ref.exists) {
+                if (gs.board.things[row][col].exists) {
                     keep = false;
                     break;
                 }
@@ -99,7 +144,7 @@ extern "C" {
     bool checkFullRow(const GameState& gs, int row) {
         bool fullrow = true;
         for (int i = 0; i < BOARD_WIDTH - ((row + gs.board.even) % 2); ++i) {
-            if (!gs.board.things[row][i].ref.exists) {
+            if (!gs.board.things[row][i].exists) {
                 fullrow = false;
                 break;
             }
@@ -107,29 +152,11 @@ extern "C" {
         return fullrow;
     }
 
-    void updateNeighs(GameState& gs, const ThingPos& pos, bool exists) {
-        for (int i = 0; i < 6; ++i) {
-            auto& dis = gs.board.things[pos.row][pos.col];
-            if (checkBounds(gs, TOGO[i])) {
-                auto& nei = gs.board.things[TOGO[i].row][TOGO[i].col];
-                nei.neighs[TOGOI[i]].exists = exists;
-                if (exists) nei.neighs[TOGOI[i]].pos = pos;
-                if (nei.ref.exists)
-                    dis.neighs[i] = nei.ref;
-                else
-                    dis.neighs[i].exists = false;
-            } else {
-                dis.neighs[i].exists = false;
-            }
-        }
-    }
-
     void addTile(GameState& gs, const ThingPos& pos, const Tile& tile, bool updateFullRows = true, bool makeExist = false) {
         auto& th = gs.board.things[pos.row][pos.col];
         th = tile;
-        if (makeExist) th.ref.exists = true;
-        th.ref.pos = pos;
-        updateNeighs(gs, pos, true);
+        if (makeExist) th.exists = true;
+        th.pos = pos;
 
         if (updateFullRows) {
             int i = 0;
@@ -139,20 +166,37 @@ extern "C" {
         }
     }
 
+    void addShatteredParticles(GameState& gs, const Thing& thing, Vector2 pos) {
+        uint8_t mskId1 = getRandVal(gs, 0, 2);
+        for (uint8_t mskId2 = 0; mskId2 < 5; ++mskId2) {
+            Vector2 vel;
+            if (mskId2 == 0) vel = {0, -1};
+            else if (mskId2 == 1) vel = {-cos(PI*0.25f), -cos(PI*0.25f)};
+            else if (mskId2 == 2) vel = {1, 0};
+            else if (mskId2 == 3) vel = {0, 1};
+            else if (mskId2 == 4) vel = {-cos(PI*0.25f), cos(PI*0.25f)};
+            gs.tmp.particles.acquire(Particle{true, thing, pos, 200.0f * vel + Vector2{200 * RAND_FLOAT_SIGNED, -200 - 200 * RAND_FLOAT}, false, true, {6, 0}, mskId1, mskId2});
+        }
+    }
+
     void addParticle(GameState& gs, const Thing& thing, Vector2 pos, Vector2 vel) {
         gs.tmp.particles.acquire(Particle{true, thing, pos, vel});
     }
 
     void generateRows(GameState& gs, int n) {
-        for (int row = 0; row < n; ++row)
-            for (int col = 0; col < BOARD_WIDTH - ((row + gs.board.even) % 2); ++col)
-                addTile(gs, {row, col}, Tile{{(unsigned char)getRandVal(gs, 0, COLORS.size() - 1), (unsigned char)getRandVal(gs, 0, COLORS.size() - 1), (unsigned char)getRandVal(gs, 0, COLORS.size() - 1)}, 
-                    {(col != (BOARD_WIDTH - 1)) || ((row + gs.board.even) % 2 == 0), {row, col}}, {0,0,0,0,0,0}});
+        for (int row = 0; row < n; ++row) {
+            for (int col = 0; col < BOARD_WIDTH - ((row + gs.board.even) % 2); ++col) {
+                addTile(gs, {row, col}, Tile{(col != (BOARD_WIDTH - 1)) || ((row + gs.board.even) % 2 == 0), {row, col}, {(unsigned char)getRandVal(gs, 0, COLORS.size() - 1), (unsigned char)getRandVal(gs, 0, COLORS.size() - 1), (unsigned char)getRandVal(gs, 0, COLORS.size() - 1)}});
+                auto& thing = gs.board.things[row][col].thing;
+                thing.bomb = (getRandVal(gs, 0, 100000) < 100000 * BOMB_PROB);
+                thing.triggered = false;
+            }
+        }
     }
 
     void removeTile(GameState& gs, const ThingPos& pos) {
-        gs.board.things[pos.row][pos.col].ref.exists = false;
-        updateNeighs(gs, pos, false);        
+        gs.board.things[pos.row][pos.col].exists = false;
+        gs.board.things[pos.row][pos.col].pos = pos;        
         if (pos.row < gs.board.nFulRowsTop)
             gs.board.nFulRowsTop = pos.row + 1;
     }
@@ -197,7 +241,7 @@ extern "C" {
         gs.rearmTime = getTime(gs);
     }
 
-    void swapExtra(GameState& gs) {
+    void swapExtra(const GameAssets& ga, GameState& gs) {
         if (gs.gun.extraArmed) {
             auto e = gs.gun.extra;
             gs.gun.extra = gs.gun.armed;
@@ -208,16 +252,32 @@ extern "C" {
             gs.gun.extraArmed = true;
             rearm(gs);
         }
+        playSound(ga, gs, ga.whoosh[1]);
         gs.swapTime = getTime(gs);
     }
 
     void loadAssets(GameAssets& ga) {
         ga.tiles = LoadTextureFromImage(LoadImageFromMemory(".png", res_tiles, res_tiles_len));
+        ga.explosion = LoadTextureFromImage(LoadImageFromMemory(".png", res_explosion, res_explosion_len));
+        ga.splash = LoadTextureFromImage(LoadImageFromMemory(".png", res_splash, res_splash_len));
+
+        ga.music = LoadMusicStreamFromMemory(".ogg", res_music, res_music_len);
+
+        ga.clang[0] = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_clang0, res_clang0_len));
+        ga.clang[1] = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_clang1, res_clang1_len));
+        ga.clang[2] = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_clang2, res_clang2_len));
+        ga.sndexp = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_sndexp, res_sndexp_len));
+        ga.shatter = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_shatter, res_shatter_len));
+        ga.whoosh[0] = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_whoosh0, res_whoosh0_len));
+        ga.whoosh[1] = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_whoosh1, res_whoosh1_len));
+        ga.sizzle = LoadSoundFromWave(LoadWaveFromMemory(".ogg", res_sizzle, res_sizzle_len));
+
+        ga.postProcFragShader = LoadShaderFromMemory(NULL, (const char*)res_ppfs);
+        ga.maskFragShader = LoadShaderFromMemory(NULL, (const char*)res_mskfs);
+
         char8_t _allChars[228] = u8" !\"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ";
         int c; auto cdpts = LoadCodepoints((const char*)_allChars, &c);
         ga.font = LoadFontFromMemory(".ttf", res_font, res_font_len, 39, cdpts, c);
-        InitAudioDevice();
-        ga.music = LoadMusicStreamFromMemory(".ogg", res_music, res_music_len);
     }
 
     DLL_EXPORT void saveUserData(const GameState& gs) {
@@ -233,30 +293,44 @@ extern "C" {
             gs.usr = *((GameState::UserData*)ptr);
     }
 
-    void resetGame(GameState& gs) {
-        gs = GameState{0};
+    void setStuff(GameState& gs) {
         loadUserData(gs);
-        
+        gs.tmp.renderTex = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
+        SetTextureWrap(gs.tmp.renderTex.texture, TEXTURE_WRAP_CLAMP);
+    }
+
+    DLL_EXPORT void setState(GameState& gs, const GameState& ngs)
+    {
+        gs = ngs;
+        setStuff(gs);
+    }
+
+    void reset(const GameAssets& ga, GameState& gs) {
+        gs = GameState{0};
         gs.seed = rand() % std::numeric_limits<int>::max();
-
+        for (int i = 0; i < gs.board.things.size(); ++i)
+            std::fill(gs.board.things[i].begin(), gs.board.things[i].end(), Tile());
         generateRows(gs, BOARD_HEIGHT - gs.board.nRowsGap);
-
-        rearm(gs);
-
-        float bHeight = ROW_HEIGHT * BOARD_HEIGHT;   
-        
+        rearm(gs);        
         gs.gameStartTime = getTime(gs);
+        setState(gs, gs);
     }
 
     DLL_EXPORT void init(GameAssets& ga, GameState& gs)
     {
+        if (!IsAudioDeviceReady()) {
+            InitAudioDevice();
+        } else if (IsMusicStreamPlaying(ga.music)) {
+            StopMusicStream(ga.music);
+        }
+
         loadAssets(ga);
-        resetGame(gs);
-        loadUserData(gs);
         PlayMusicStream(ga.music);
+        
+        reset(ga, gs);
     }
 
-    void shootAndRearm(GameState& gs) {
+    void shootAndRearm(const GameAssets& ga, GameState& gs) {
         gs.firstShotFired = true;
         gs.bullet.exists = true;
         gs.bullet.rebouncing = false;
@@ -264,11 +338,13 @@ extern "C" {
         gs.bullet.thing = gs.gun.armed;
         gs.bullet.vel = BULLET_SPEED * Vector2{cos(dir), -sin(dir)};
         gs.bullet.pos = {(float)GetScreenWidth() * 0.5f, (float)GetScreenHeight() - TILE_RADIUS};
-
+        playSound(ga, gs, ga.whoosh[0]);
         rearm(gs);
     }
 
     bool checkMatch(const Thing& th1, const Thing& th2, int param) {
+        if (th1.bomb || th2.bomb)
+            return false;
         switch (param) {
             case 0: return th1.clr == th2.clr;
             case 1: return th1.shp == th2.shp;
@@ -283,17 +359,17 @@ extern "C" {
             return;
         visited[pos.row][pos.col] = true;
         if (checkBounds(gs, pos)) {
-            const auto& tile = gs.board.things[pos.row][pos.col];
+            const auto& tile = getTile(gs, pos);
             bool match = checkMatch(tile.thing, thing, param);
-            if ((tile.ref.exists && match) || first) {
-                if (tile.ref.exists && match) todrop.acquire(pos);
-                for (auto& n : tile.neighs)
-                    if (n.exists) checkDropRecur(gs, n.pos, thing, param, todrop, visited, false);
+            if ((tile.exists && match) || (first && !tile.exists)) {
+                if (tile.exists && match) todrop.acquire(pos);
+                for (auto& n : getNeighs(gs, pos))
+                    if (getTile(gs, n).exists) checkDropRecur(gs, n, thing, param, todrop, visited, false);
             }
         }
     }
 
-    bool isConnectedToTopRecur(const GameState& gs, const ThingPos& pos, std::map<int, std::map<int, bool>>& visited)
+    bool isConnectedToTopRecur(GameState& gs, const ThingPos& pos, std::map<int, std::map<int, bool>>& visited)
     {
         if (visited.count(pos.row) && visited[pos.row].count(pos.col))
             return false;
@@ -301,11 +377,11 @@ extern "C" {
             std::cout << "\n";
         visited[pos.row][pos.col] = true;
         if (checkBounds(gs, pos)) {
-            auto& tile = gs.board.things[pos.row][pos.col];
-            if (tile.ref.exists) {
+            auto& tile = getTile(gs, pos);
+            if (tile.exists) {
                 bool connected = (pos.row == gs.board.nFulRowsTop - 1);
-                for (auto& n : tile.neighs)
-                    if (n.exists && !connected) connected |= isConnectedToTopRecur(gs, n.pos, visited);
+                for (auto& n : getNeighs(gs, pos))
+                    if (getTile(gs, n).exists && !connected) connected |= isConnectedToTopRecur(gs, n, visited);
                 visited[pos.row][pos.col] = connected;
                 return connected;
             }
@@ -322,11 +398,11 @@ extern "C" {
         visited[pos.row][pos.col] = true;
         std::map<int, std::map<int, bool>> visCon;
         if (checkBounds(gs, pos) && (!check || !isConnectedToTopRecur(gs, pos, visCon))) {
-            auto& tile = gs.board.things[pos.row][pos.col];
-            if (tile.ref.exists) {
+            auto& tile = getTile(gs, pos);
+            if (tile.exists) {
                 uncon.acquire(pos);
-                for (auto& n : tile.neighs)
-                    if (n.exists) checkUnconnectedRecur(gs, n.pos, visited, uncon, false);
+                for (auto& n : getNeighs(gs, pos))
+                    if (getTile(gs, n).exists) checkUnconnectedRecur(gs, n, visited, uncon, false);
             }
         }
     }
@@ -336,35 +412,35 @@ extern "C" {
         if (visited.count(pos.row) && visited[pos.row].count(pos.col) || curdepth >= depth)
             return;
         visited[pos.row][pos.col] = true;
-        auto& tile = gs.board.things[pos.row][pos.col];
-        if (tile.ref.exists && curdepth == 0) tile.shake = std::max(tile.shake, shake / (curdepth + 1));
-        if (tile.ref.exists || curdepth == 0) {
+        auto& tile = getTile(gs, pos);
+        if (tile.exists && curdepth == 0) tile.shake = std::max(tile.shake, shake / (curdepth + 1));
+        if (tile.exists || curdepth == 0) {
             for (int i = 0; i < 6; ++i) {
                 if (checkBounds(gs, TOGO[i])) {
-                    auto& n = gs.board.things[TOGO[i].row][TOGO[i].col];
+                    auto& n = getTile(gs, TOGO[i]);
                     bool match = checkMatch(n.thing, thing, param);
                     bool samecolor = (mtchstreak && match);
-                    if (n.ref.exists) 
+                    if (n.exists) 
                         n.shake = std::max(n.shake, samecolor ? shake : (shake / (curdepth + 2)));
                 }
             }
             if (mtchstreak) {
                 for (int i = 0; i < 6; ++i) {
                     if (checkBounds(gs, TOGO[i])) {
-                        auto& n = gs.board.things[TOGO[i].row][TOGO[i].col];
+                        auto& n = getTile(gs, TOGO[i]);
                         bool match = checkMatch(n.thing, thing, param);
-                        if (n.ref.exists && match) 
-                            addShakeRecur(gs, n.ref.pos, visited, thing, param, shake, depth, curdepth, true);
+                        if (n.exists && match) 
+                            addShakeRecur(gs, n.pos, visited, thing, param, shake, depth, curdepth, true);
                     }
                 }
             }
             if (!mtchstreak || curdepth == 0) {
                 for (int i = 0; i < 6; ++i) {
                     if (checkBounds(gs, TOGO[i])) {
-                        auto& n = gs.board.things[TOGO[i].row][TOGO[i].col];
+                        auto& n = getTile(gs, TOGO[i]);
                         bool match = checkMatch(n.thing, thing, param);
-                        if (n.ref.exists && !match) 
-                            addShakeRecur(gs, n.ref.pos, visited, thing, param, shake, depth, curdepth + 1, false);
+                        if (n.exists && !match) 
+                            addShakeRecur(gs, n.pos, visited, thing, param, shake, depth, curdepth + 1, false);
                     }
                 }
             }
@@ -381,28 +457,55 @@ extern "C" {
         }
     }
 
-    void checkDrop(GameState& gs) {
+    void scorePoints(GameState& gs, int amount) {
+        gs.score += amount * gs.combo;
+    }
+
+    void addDrop(GameState& gs, Vector2 pos) {
+        gs.tmp.shDropCenters[gs.tmp.shNDrops] = pos;
+        gs.tmp.shDropTimes[gs.tmp.shNDrops] = getTime(gs);
+        gs.tmp.shNDrops++;
+    }
+
+    void addAnimation(const GameAssets& ga, GameState& gs, const Texture2D* tex, float interval, Vector2 pos) {
+        gs.tmp.animations.acquire(Animation{tex, getTime(gs), interval, pos});
+    }
+
+    void triggerBomb(const GameAssets& ga, GameState& gs, const ThingPos& pos) {
+        auto& thing = getTile(gs, pos).thing;
+        thing.triggered = true;
+        thing.triggerTime = getTime(gs);
+        gs.bullet.exists = false;
+        playSound(ga, gs, ga.sizzle);
+        addParticle(gs, gs.bullet.thing, gs.bullet.pos, {-gs.bullet.vel.x, -400.0f - 100.0f * RAND_FLOAT});
+        scorePoints(gs, 1);
+    }
+
+    void checkDrop(GameState& gs, const ThingPos& pos, const Thing& thing, int minToDrop = 0) {
         int bestK = 0, bestScore = 0;
         Arena<MAX_TODROP, ThingPos> todrops[3];
         Arena<MAX_TODROP, ThingPos> uncons[3];
+        auto exists = getTile(gs, pos).exists;
+        int lim = (exists ? minToDrop : (minToDrop - 1));
         for (int k = 0; k < gs.usr.n_params; ++k) {
             std::map<int, std::map<int, bool>> vis;
-            checkDropRecur(gs, gs.bullet.lstEmp, gs.bullet.thing, k, todrops[k], vis);
-            if (todrops[k].count() >= N_TO_DROP - 1) {
+            checkDropRecur(gs, pos, thing, k, todrops[k], vis);
+            int count = todrops[k].count();
+            if (count >= lim) {
                 for (int i = 0; i < todrops[k].count(); ++i)
                     removeTile(gs, todrops[k].at(i));
                 std::map<int, std::map<int, bool>> vis2;
                 for (int i = 0; i < todrops[k].count(); ++i) {
                     auto& td = todrops[k].at(i);
-                    auto& thing = gs.board.things[td.row][td.col];
-                    for (auto& n : thing.neighs) {
-                        if (n.exists)
-                            checkUnconnectedRecur(gs, n.pos, vis2, uncons[k]);
+                    auto& tile = getTile(gs, td);
+                    for (auto& n : getNeighs(gs, td)) {
+                        if (getTile(gs, n).exists)
+                            checkUnconnectedRecur(gs, n, vis2, uncons[k]);
                     }
                 }
                 for (int i = 0; i < todrops[k].count(); ++i)
-                    addTile(gs, todrops[k].at(i), gs.board.things[todrops[k].at(i).row][todrops[k].at(i).col], true, true);
-                todrops[k].acquire(gs.bullet.lstEmp);
+                    addTile(gs, todrops[k].at(i), getTile(gs, todrops[k].at(i)), true, true);
+                if (!exists) todrops[k].acquire(pos);
             }
             int score = todrops[k].count() + uncons[k].count();
             if (bestScore < score) {
@@ -411,35 +514,81 @@ extern "C" {
             }
         }
         std::map<int, std::map<int, bool>> vis2;
-        addShakeRecur(gs, gs.bullet.lstEmp, vis2, gs.bullet.thing, bestK, SHAKE_TIME, SHAKE_DEPTH);
-        gs.bullet.todrop = todrops[bestK];
-        gs.bullet.uncon = uncons[bestK];
-        gs.bullet.rebouncing = true;
-        gs.bullet.rebounce = 0.0f;
-        gs.bullet.rebCp = (gs.bullet.pos - Vector2Normalize(gs.bullet.vel) * BULLET_REBOUNCE)- Vector2{0, gs.board.pos};
-        gs.bullet.rebEnd = (getPixByPos(gs, gs.bullet.lstEmp)) - Vector2{0, gs.board.pos};
-        gs.bullet.rebTime = getTime(gs);
+        addShakeRecur(gs, pos, vis2, thing, bestK, SHAKE_TIME, SHAKE_DEPTH);
+        gs.board.todrop = todrops[bestK];
+        gs.board.uncon = uncons[bestK];
     }
 
-    void doDrop(GameState& gs, const ThingPos& pos) {
-        if (gs.bullet.todrop.count() >= N_TO_DROP) {
-            gs.score += gs.bullet.todrop.count();
-            gs.score += gs.bullet.uncon.count();
-            for (int i = 0; i < gs.bullet.todrop.count(); ++i) {
-                auto& td = gs.bullet.todrop.at(i);
+    void explodeBomb(const GameAssets& ga, GameState& gs, const ThingPos& pos_);
+
+    void doDrop(const GameAssets& ga, GameState& gs, int minToDrop = 0, bool shatter = true, Vector2 vel = Vector2Zero()) {
+        if (gs.board.todrop.count() >= minToDrop) {
+            scorePoints(gs, gs.board.todrop.count() + gs.board.uncon.count());
+            for (int i = 0; i < gs.board.todrop.count(); ++i) {
+                auto& td = gs.board.todrop.at(i);
                 removeTile(gs, td);
-                addParticle(gs, gs.board.things[td.row][td.col].thing, getPixByPos(gs, td), {gs.bullet.vel.x * 0.1f, -500.5f});
+                auto pixpos = getPixByPos(gs, td);
+                if (shatter) {
+                    addAnimation(ga, gs, &ga.splash, SPLASH_TIME, pixpos);
+                    playSound(ga, gs, ga.shatter);
+                    addShatteredParticles(gs, getTile(gs, td).thing, pixpos);
+                } else {
+                    addParticle(gs, getTile(gs, td).thing, getPixByPos(gs, td), vel);
+                }
             }
-            for (int i = 0; i < gs.bullet.uncon.count(); ++i) {                
-                auto& un = gs.bullet.uncon.at(i);
+            for (int i = 0; i < gs.board.uncon.count(); ++i) {                
+                auto& un = gs.board.uncon.at(i);
                 removeTile(gs, un);
-                addParticle(gs, gs.board.things[un.row][un.col].thing, getPixByPos(gs, un), Vector2Zero());
+                addParticle(gs, getTile(gs, un).thing, getPixByPos(gs, un), Vector2Zero());
             }
         }
-        checkLines(gs);
+        gs.board.todrop.clear();
+        gs.board.uncon.clear();
     }
 
-    void flyBullet(GameState& gs, float delta)
+    void explodeBomb(const GameAssets& ga, GameState& gs, const ThingPos& pos) {
+        auto& thing = getTile(gs, pos).thing;
+        auto pixpos = getPixByPos(gs, pos);
+        addDrop(gs, pixpos);
+        playSound(ga, gs, ga.sndexp);
+        addAnimation(ga, gs, &ga.explosion, EXPLOSION_TIME, pixpos);
+        auto& tile = getTile(gs, pos);
+        removeTile(gs, pos);
+        for (auto& n : getNeighs(gs, pos)) {
+            auto ntile = getTile(gs, n);
+            if (ntile.exists) {
+                if (ntile.thing.bomb) {
+                    triggerBomb(ga, gs, n);
+                } else {
+                    checkDrop(gs, n, getTile(gs, pos).thing);
+                    doDrop(ga, gs);
+                }
+            }            
+            for (auto& nn : getNeighs(gs, n)) {
+                auto nntile = getTile(gs, nn);
+                if (nntile.exists) {
+                    if (nntile.thing.bomb) {
+                        //triggerBomb(ga, gs, nntile.pos);
+                        explodeBomb(ga, gs, nntile.pos);
+                    } else {
+                        checkDrop(gs, nntile.pos, getTile(gs, nntile.pos).thing);
+                        doDrop(ga, gs, 0, false, 300.0f * Vector2Normalize(getPixByPos(gs, nntile.pos) - pixpos));
+                    }
+                }
+            }
+        }
+    }
+
+    void checkBomb(const GameAssets& ga, GameState& gs, const ThingPos& pos) {
+        auto& tile = getTile(gs, pos);
+        if (tile.thing.triggered) {
+            tile.shake = std::clamp((getTime(gs) - tile.thing.triggerTime)/BOMB_TRIGGER_TIME, 0.0, 1.0);
+            if (getTime(gs) - tile.thing.triggerTime > BOMB_TRIGGER_TIME)
+                explodeBomb(ga, gs, pos);
+        }
+    }
+
+    void flyBullet(const GameAssets& ga, GameState& gs, float delta)
     {
         if (gs.bullet.exists)
             gs.bullet.pos += gs.bullet.vel * delta;
@@ -454,27 +603,41 @@ extern "C" {
             float prog = (float)(getTime(gs) - gs.bullet.rebTime)/BULLET_REBOUNCE_TIME;
             if (prog > 1.0f) {
                 gs.bullet.exists = false;
-                addTile(gs, gs.bullet.lstEmp, Tile{gs.bullet.thing, {true}});
-                doDrop(gs, gs.bullet.lstEmp);
+                addTile(gs, gs.bullet.lstEmp, Tile{true, gs.bullet.lstEmp, gs.bullet.thing});
+                doDrop(ga, gs, N_TO_DROP); 
                 gs.bullet.rebouncing = false;
             } else {
                 gs.bullet.rebounce = easeOutBounce(prog);
             }
         } else if (gs.bullet.exists) {
-            if (gs.bullet.pos.x - BULLET_RADIUS_H < brect.x || gs.bullet.pos.x + BULLET_RADIUS_H > brect.x + brect.width)
+            if (gs.bullet.pos.x - BULLET_RADIUS_H < brect.x || gs.bullet.pos.x + BULLET_RADIUS_H > brect.x + brect.width) {
+                playSound(ga, gs, ga.clang[GetRandomValue(0, 2)]);
+                addAnimation(ga, gs, &ga.splash, SPLASH_TIME, gs.bullet.pos + Vector2{gs.bullet.vel.x/abs(gs.bullet.vel.x), 0});
                 gs.bullet.vel.x *= -1.0f;
+            }
 
-            if (!gs.board.things[bulpos.row][bulpos.col].ref.exists)
+            if (!getTile(gs, bulpos).exists)
                 gs.bullet.lstEmp = {bulpos.row, bulpos.col};
             
             for (int i = 0; i < BOARD_HEIGHT; ++i) {
                 for (int j = 0; j < BOARD_WIDTH - ((i + gs.board.even) % 2); ++j) {
                     const auto& tile = gs.board.things[i][j];
-                    if (tile.ref.exists) {
+                    if (tile.exists) {
                         Vector2 tpos = getPixByPos(gs, {i, j});
                         if (Vector2DistanceSqr(tpos, gs.bullet.pos) < BULLET_HIT_DIST_SQR ||
                             Vector2DistanceSqr(tpos, gs.bullet.pos + Vector2Normalize(gs.bullet.vel) * BULLET_RADIUS_H) < BULLET_HIT_DIST_SQR) {
-                            checkDrop(gs);
+                            playSound(ga, gs, ga.clang[GetRandomValue(0, 2)]);
+                            addAnimation(ga, gs, &ga.splash, SPLASH_TIME, 0.5f * (tpos + getPixByPos(gs, gs.bullet.lstEmp)));
+                            if (tile.thing.bomb) {
+                                triggerBomb(ga, gs, {i, j});
+                            } else {
+                                checkDrop(gs, gs.bullet.lstEmp, gs.bullet.thing, N_TO_DROP);                                
+                                gs.bullet.rebouncing = true;
+                                gs.bullet.rebounce = 0.0f;
+                                gs.bullet.rebCp = (gs.bullet.pos - Vector2Normalize(gs.bullet.vel) * BULLET_REBOUNCE)- Vector2{0, gs.board.pos};
+                                gs.bullet.rebEnd = (getPixByPos(gs, gs.bullet.lstEmp)) - Vector2{0, gs.board.pos};
+                                gs.bullet.rebTime = getTime(gs);
+                            }
                             break;
                         }
                     }
@@ -490,14 +653,39 @@ extern "C" {
         for (int i = 0; i < gs.tmp.particles.count(); ++i) {
             auto& prt = gs.tmp.particles.at(i);
             if (prt.exists) {
-                prt.pos += prt.vel * GetFrameTime();
-                prt.vel += GRAVITY * Vector2{0.0f, 1.0f} * GetFrameTime();
+                prt.pos += prt.vel * getFrameTime(gs);
+                prt.vel += GRAVITY * Vector2{0.0f, 1.0f} * getFrameTime(gs);
                 if (prt.pos.y < GetScreenHeight())
                     someInFrame = true;
             }
         }
         if (!someInFrame)
             gs.tmp.particles.clear();
+    }
+
+    void checkDrops(GameState& gs) {
+        bool someStillGoing = false;
+        for (int i = 0; i < gs.tmp.shNDrops; ++i) {
+            if (getTime(gs) - gs.tmp.shDropTimes[i] < WAVE_FADE_TIME) {
+                someStillGoing = true;
+                break;
+            }
+        }
+        if (!someStillGoing)
+            gs.tmp.shNDrops = 0;
+    }
+
+    void checkAnimations(GameState& gs) {
+        bool someStillGoing = false;
+        for (int i = 0; i < gs.tmp.animations.count(); ++i) {
+            auto& anim = gs.tmp.animations.at(i);
+            if (!anim.done) {
+                anim.done = ((getTime(gs) - anim.startTime) / anim.interval > 1.0f);
+                someStillGoing = true;
+            }
+        }
+        if (!someStillGoing)
+            gs.tmp.animations.clear();
     }
 
     void gameOver(GameState& gs) {
@@ -515,10 +703,10 @@ extern "C" {
         }
     }
 
-    void update(GameState& gs) 
+    void update(const GameAssets& ga, GameState& gs) 
     {
         if (gs.gameStartTime + GAME_START_TIME < getTime(gs)) {
-            auto delta = GetFrameTime() / UPDATE_ITS;
+            auto delta = getFrameTime(gs) / UPDATE_ITS;
 
 #ifdef PLATFORM_ANDROID
             if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
@@ -539,95 +727,96 @@ extern "C" {
             gs.gun.speed = std::clamp(gs.gun.speed, GUN_START_SPEED, GUN_FULL_SPEED);
             gs.gun.dir = std::clamp(gs.gun.dir, -PI * 0.45f, PI * 0.45f);
 
-            flyBullet(gs, delta);
+            flyBullet(ga, gs, delta);
         }
     }
 
     void updateOnce(const GameAssets& ga, GameState& gs) 
     {   
         if (gs.gameOver) {
-            if (getTime(gs) > gs.gameOverTime + GAME_OVER_TIMEOUT) {
+            for (int i = 0; i < BOARD_HEIGHT; ++i) {
+                for (int j = 0; j < BOARD_WIDTH - ((i + gs.board.even) % 2); ++j) {
+                    const Tile& tile = gs.board.things[i][j];
+                    if (tile.exists) {
+                        if ((getTime(gs) - gs.gameOverTime) > (GAME_OVER_TIME_PER_ROW * (BOARD_HEIGHT - 1 - i))) {
+                            gs.board.things[i][j].exists = false;
+                            Vector2 tpos = getPixByPos(gs, {i, j});
+                            if (tpos.y > 0) {
+                                playSound(ga, gs, ga.clang[GetRandomValue(0, 2)]);
+                                addParticle(gs, gs.board.things[i][j].thing, getPixByPos(gs, {i, j}), Vector2{50.0f * RAND_FLOAT_SIGNED, -400.0f - 100.0f * RAND_FLOAT});
+                            }
+                        }
+                    }
+                }
+            }
+            if (getTime(gs) > gs.gameOverTime + GAME_OVER_TIMEOUT) {                
 #ifdef PLATFORM_ANDROID
                 if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT))
 #else
                 if ((IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)))
 #endif            
-                resetGame(gs);
-            }
-        } else if (gs.gameStartTime + GAME_START_TIME < getTime(gs)) {
-            if (gs.gameOver) {
-                for (int i = 0; i < BOARD_HEIGHT; ++i) {
-                    for (int j = 0; j < BOARD_WIDTH - ((i + gs.board.even) % 2); ++j) {
-                        const Tile& tile = gs.board.things[i][j];
-                        if (tile.ref.exists) {
-                            if ((getTime(gs) - gs.gameOverTime) > (GAME_OVER_TIME_PER_ROW * (BOARD_HEIGHT - 1 - i))) {
-                                gs.board.things[i][j].ref.exists = false;
-                                Vector2 tpos = getPixByPos(gs, {i, j});
-                                if (tpos.y > 0)
-                                    addParticle(gs, gs.board.things[i][j].thing, getPixByPos(gs, {i, j}), Vector2{50.0f * RAND_FLOAT_SIGNED, -400.0f - 100.0f * RAND_FLOAT});
-                            }
-                        }
-                    }
-                }
-            } else {
-                for (int i = 0; i < BOARD_HEIGHT; ++i) {
-                    for (int j = 0; j < BOARD_WIDTH - ((i + gs.board.even) % 2); ++j) {
-                        Tile& tile = gs.board.things[i][j];
-                        if (tile.ref.exists) {
-                            if (tile.shake < SHAKE_TIME || gs.bullet.todrop.count() < N_TO_DROP - 1)
-                                tile.shake = std::max(tile.shake - GetFrameTime(), 0.0f);
-                            else
-                                tile.shake = std::min(tile.shake + GetFrameTime() * 2, MAX_SHAKE);
-                            Vector2 tpos = getPixByPos(gs, {i, j});
-                            if ((GetScreenHeight() - 2 * TILE_RADIUS) - (tpos.y + TILE_RADIUS) < 0)
-                                gameOver(gs);
-                        }
-                    }
-                }
-
-                if (IsKeyDown(KEY_LEFT_CONTROL)) {
-                    auto mpos = getPosByPix(gs, {(float)GetMouseX(), (float)GetMouseY()});
-                    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                        addTile(gs, mpos, Tile{{(unsigned char)getRandVal(gs, 0, COLORS.size() - 1), (unsigned char)getRandVal(gs, 0, COLORS.size() - 1), (unsigned char)getRandVal(gs, 0, COLORS.size() - 1)}, 
-                    {(mpos.col != (BOARD_WIDTH - 1)) || ((mpos.row + gs.board.even) % 2 == 0), {mpos.row, mpos.col}}, {0,0,0,0,0,0}});
-                    } else if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
-                        removeTile(gs, mpos);
-                    }
-                }
-
-                if (!IsKeyDown(KEY_LEFT_CONTROL) && GetMouseY() < GetScreenHeight() - TILE_RADIUS * 2.0f) {
-            #ifdef PLATFORM_ANDROID
-                    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && !gs.bullet.exists)
-            #else
-                    if ((IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) && !gs.bullet.exists)
-            #endif
-                        shootAndRearm(gs);
-                }
+                    reset(ga, gs);
                 
-                static int touchCount = 0;                
-#ifdef PLATFORM_ANDROID
-                if ((GetTouchPointCount() == 2 && touchCount == 1) || (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && GetMouseY() > GetScreenHeight() - TILE_RADIUS * 2.0f))
-#else
-                if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && GetMouseY() > GetScreenHeight() - TILE_RADIUS * 2.0f))
-#endif
-                    swapExtra(gs);
-                touchCount = GetTouchPointCount();
-        
-                if (gs.board.moveTime > 0 && gs.board.pos < 0) {
-                    gs.board.pos = gs.board.pos * (1.0f - easeOutQuad(1.0f - gs.board.moveTime/gs.board.totalMoveTime));
-                    gs.board.moveTime -= GetFrameTime();
+            }                
+        } else if (gs.gameStartTime + GAME_START_TIME < getTime(gs)) {
+            for (int i = 0; i < BOARD_HEIGHT; ++i) {
+                for (int j = 0; j < BOARD_WIDTH - ((i + gs.board.even) % 2); ++j) {
+                    Tile& tile = gs.board.things[i][j];
+                    if (tile.exists) {
+                        if (tile.shake < SHAKE_TIME || gs.board.todrop.count() < N_TO_DROP - 1)
+                            tile.shake = std::max(tile.shake - getFrameTime(gs), 0.0f);
+                        else
+                            tile.shake = std::min(tile.shake + getFrameTime(gs) * 2, MAX_SHAKE);
+                        Vector2 tpos = getPixByPos(gs, {i, j});
+                        if ((GetScreenHeight() - 2 * TILE_RADIUS) - (tpos.y + TILE_RADIUS) < 0)
+                            gameOver(gs);
+                        if (tile.thing.bomb)
+                            checkBomb(ga, gs, {i, j});
+                    }
                 }
-
-                if (IsKeyPressed(KEY_Q))
-                    gs.usr.n_params = (gs.usr.n_params % 3) + 1;
-
             }
+
+            if (IsKeyDown(KEY_LEFT_CONTROL)) {
+                auto mpos = getPosByPix(gs, {(float)GetMouseX(), (float)GetMouseY()});
+                if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+                    addTile(gs, mpos, Tile{(mpos.col != (BOARD_WIDTH - 1)) || ((mpos.row + gs.board.even) % 2 == 0), {mpos.row, mpos.col}, 
+                        {(unsigned char)getRandVal(gs, 0, COLORS.size() - 1), (unsigned char)getRandVal(gs, 0, COLORS.size() - 1), (unsigned char)getRandVal(gs, 0, COLORS.size() - 1)}});
+                } else if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
+                    removeTile(gs, mpos);
+                }
+            }
+
+            if (!IsKeyDown(KEY_LEFT_CONTROL) && GetMouseY() < GetScreenHeight() - TILE_RADIUS * 2.0f) {
+        #ifdef PLATFORM_ANDROID
+                if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && !gs.bullet.exists)
+        #else
+                if ((IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) && !gs.bullet.exists)
+        #endif
+                    shootAndRearm(ga, gs);
+            }
+            
+            static int touchCount = 0;                
+#ifdef PLATFORM_ANDROID
+            if ((GetTouchPointCount() == 2 && touchCount == 1) || (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && GetMouseY() > GetScreenHeight() - TILE_RADIUS * 2.0f))
+#else
+            if (IsKeyPressed(KEY_LEFT_CONTROL) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && GetMouseY() > GetScreenHeight() - TILE_RADIUS * 2.0f))
+#endif
+                swapExtra(ga, gs);
+            touchCount = GetTouchPointCount();
+    
+            if (gs.board.moveTime > 0 && gs.board.pos < 0) {
+                gs.board.pos = gs.board.pos * (1.0f - easeOutQuad(1.0f - gs.board.moveTime/gs.board.totalMoveTime));
+                gs.board.moveTime -= getFrameTime(gs);
+            }
+
+            if (IsKeyPressed(KEY_Q))
+                gs.usr.n_params = (gs.usr.n_params % 3) + 1;
 
             if (gs.firstShotFired) {
                 if (gs.usr.velEnabled) 
-                    gs.board.pos += TILE_PIXEL * (gs.usr.accEnabled ? gs.board.speed : BOARD_CONST_SPEED) * GetFrameTime();
+                    gs.board.pos += TILE_PIXEL * (gs.usr.accEnabled ? gs.board.speed : BOARD_CONST_SPEED) * getFrameTime(gs);
                 if (gs.usr.accEnabled) 
-                    gs.board.speed += BOARD_ACC * GetFrameTime();
+                    gs.board.speed += BOARD_ACC * getFrameTime(gs);
             }
 
             if (IsKeyPressed(KEY_Z)) {
@@ -636,6 +825,8 @@ extern "C" {
                 else
                     gs.usr.velEnabled = false;
             }
+            
+            checkLines(gs);
         }
     }
 
@@ -670,22 +861,48 @@ extern "C" {
         DrawTexturePro(ga.tiles, {tpos.col * TILE_SIZE, tpos.row * TILE_SIZE, sz.x, sz.y}, {pos.x, pos.y, (float)int(sz.x * TILE_PIXEL), (float)int(sz.y * TILE_PIXEL)}, {0, 0}, 0, col);
     }
 
-    void drawThing(const GameAssets& ga, const GameState& gs, Vector2 pos, const Thing& thing) {
-        if (gs.usr.n_params == 1)
-            drawTile(ga, {0, 0}, pos, COLORS[thing.clr], {TILE_SIZE, TILE_SIZE + 1.0f});
-        else if (gs.usr.n_params >= 2)
-            drawTile(ga, {0, thing.shp}, pos, COLORS[thing.clr], {TILE_SIZE, TILE_SIZE + 1.0f});
-        if (gs.usr.n_params >= 3)
-            drawTile(ga, {0, thing.sym}, pos, COLORS[thing.clr]);
+    void drawThing(const GameAssets& ga, const GameState& gs, Vector2 pos, const Thing& thing, bool masked = false, ThingPos maskTilePos = {}, uint8_t maskId1 = 0, uint8_t maskId2 = 0) {
+
+        if (masked) {
+            (*((GameState*)(&gs))).tmp.shMaskTilePos = Vector2{float(maskTilePos.col + maskId1), float(maskTilePos.row)};
+            (*((GameState*)(&gs))).tmp.shMaskId = maskId2;
+            SetShaderValue(ga.maskFragShader, GetShaderLocation(ga.maskFragShader, "maskTilePos"), &gs.tmp.shMaskTilePos, SHADER_UNIFORM_VEC2);
+            SetShaderValue(ga.maskFragShader, GetShaderLocation(ga.maskFragShader, "maskId"), &gs.tmp.shMaskId, SHADER_UNIFORM_UINT);
+            BeginDrawing();
+            BeginShaderMode(ga.maskFragShader);
+            rlEnableShader(ga.maskFragShader.id);
+            rlSetUniformSampler(GetShaderLocation(ga.maskFragShader, "tiles"), ga.tiles.id);
+        }
+        
+        if (thing.bomb)
+            drawTile(ga, {4, thing.triggered ? ((int(floor(getTime(gs) * 20)) % 2 == 0) ? 4 : 5) : 3}, pos);
+        else
+            drawTile(ga, {0, (gs.usr.n_params == 1) ? 0 : thing.shp}, pos, COLORS[thing.clr], {TILE_SIZE, TILE_SIZE + 1.0f});
+
+        if (masked) {
+            EndShaderMode();
+        }
+
+        //if (gs.usr.n_params >= 3)
+        //    drawTile(ga, {0, thing.sym}, pos, COLORS[thing.clr]);
         //for (auto& n : thing.neighs)
         //    if (n.exists) DrawLineV(pos, (getPixByPos(gs, n.pos) + pos) * 0.5, WHITE);
     }
 
     void drawParticles(const GameAssets& ga, const GameState& gs) {
+        for (int i = 0; i < gs.tmp.animations.count(); ++i) {
+            auto& anim = gs.tmp.animations.get(i);
+            if (!anim.done) {
+                auto nframes = int(anim.tex->width / anim.tex->height);
+                auto frame = std::clamp(int(std::clamp(float((getTime(gs) - anim.startTime)/anim.interval), 0.0f, 1.0f) * nframes), 0, nframes - 1);
+                DrawTexturePro(*anim.tex, {float(anim.tex->height * frame), 0.0f, float(anim.tex->height), float(anim.tex->height)}, {anim.pos.x - anim.tex->height * 0.5f * TILE_PIXEL, anim.pos.y - anim.tex->height * 0.5f * TILE_PIXEL, anim.tex->height * TILE_PIXEL, anim.tex->height * TILE_PIXEL}, {0, 0}, 0, WHITE);
+            }
+        }
         for (int i = gs.tmp.particles.count() - 1; i >= 0; --i) {
             auto& prt = gs.tmp.particles.get(i);
-            if (prt.exists)
-                drawThing(ga, gs, prt.pos, prt.thing);
+            if (prt.exists) {
+                drawThing(ga, gs, prt.pos, prt.thing, prt.masked, prt.maskTilesStartPos, prt.maskId1, prt.maskId2);
+            }
         }
     }
 
@@ -693,11 +910,13 @@ extern "C" {
         for (int i = 0; i < BOARD_HEIGHT; ++i) {
             for (int j = 0; j < BOARD_WIDTH - ((i + gs.board.even) % 2); ++j) {
                 const Tile& tile = gs.board.things[i][j];
-                if (tile.ref.exists) {
+                if (tile.exists) {
                     Vector2 tpos = getPixByPos(gs, {i, j});
-                    Vector2 shake = gs.gameOver ?
-                        SHAKE_STR * RAND_FLOAT_SIGNED_2D * std::clamp((getTime(gs) - gs.gameOverTime)/std::max((GAME_OVER_TIME_PER_ROW * (BOARD_HEIGHT - 1 - i)), 0.001f), 0.0, 1.0) :
-                        RAND_FLOAT_SIGNED_2D * tile.shake * SHAKE_STR;
+                    Vector2 shake = SHAKE_STR * RAND_FLOAT_SIGNED_2D * (
+                        gs.gameOver ?
+                            std::clamp((getTime(gs) - gs.gameOverTime)/std::max((GAME_OVER_TIME_PER_ROW * (BOARD_HEIGHT - 1 - i)), 0.001f), 0.0, 1.0) :
+                            tile.shake
+                        );
                     drawThing(ga, gs, tpos + shake, tile.thing);
                 }
             }
@@ -780,7 +999,7 @@ extern "C" {
             for (int i = 0; i < BOARD_HEIGHT; ++i) {
                 for (int j = 0; j < BOARD_WIDTH - ((i + gs.board.even) % 2); ++j) {
                     const Tile& tile = gs.board.things[i][j];
-                    if (tile.ref.exists) {
+                    if (tile.exists) {
                         Vector2 tpos = getPixByPos(gs, {i, j});
                         float h = (GetScreenHeight() - 2 * TILE_RADIUS) - (tpos.y + TILE_RADIUS);
                         if (h < ROW_HEIGHT * 2) {
@@ -799,6 +1018,9 @@ extern "C" {
             gs.settingsOpened = !gs.settingsOpened;
             gs.inputTimeoutTime = getTime(gs);
         }
+        if (IsKeyPressed(KEY_ESCAPE))
+            gs.settingsOpened = !gs.settingsOpened;
+
     }
 
     void drawSettingsButton(const GameAssets& ga, const GameState& gs) {
@@ -873,7 +1095,7 @@ extern "C" {
         if (!gs.usr.velEnabled || !gs.usr.accEnabled || (gs.usr.n_params == 1))
             gs.alteredDifficulty = true;
         
-        BeginDrawing();
+        BeginTextureMode(gs.tmp.renderTex);
         ClearBackground(BLACK);        
         if (gs.settingsOpened) {
             updateAndDrawSettings(ga, gs);
@@ -882,12 +1104,14 @@ extern "C" {
             if (IsWindowFocused()) {                            
                 if (gs.inputTimeoutTime == 0)
                     gs.inputTimeoutTime = getTime(gs);
-                if (getTime(gs) - gs.inputTimeoutTime > INPUT_TIMEOUT && GetFrameTime() < 1.0) {
+                if (getTime(gs) - gs.inputTimeoutTime > INPUT_TIMEOUT && getFrameTime(gs) < 1.0) {
                     for (int i = 0; i < UPDATE_ITS; ++i)
-                        update(gs);
+                        update(ga, gs);
                     updateOnce(ga, gs);
                 }
                 flyParticles(gs);
+                checkDrops(gs);
+                checkAnimations(gs);
                 updateMusic(ga, gs);
             } else  {
                 gs.inputTimeoutTime = 0;
@@ -895,7 +1119,29 @@ extern "C" {
             draw(ga, gs);
             drawSettingsButton(ga, gs);
         }
+        EndTextureMode();
+
+        if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE))
+            addDrop(gs, GetMousePosition());
+        
+        gs.tmp.shTime = getTime(gs);
+        gs.tmp.shScreenSize = {(float)GetScreenWidth(), (float)GetScreenHeight()};
+        SetShaderValue(ga.postProcFragShader, GetShaderLocation(ga.postProcFragShader, "time"), &gs.tmp.shTime, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(ga.postProcFragShader, GetShaderLocation(ga.postProcFragShader, "screenSize"), &gs.tmp.shScreenSize, SHADER_UNIFORM_VEC2);
+        SetShaderValue(ga.postProcFragShader, GetShaderLocation(ga.postProcFragShader, "nDrops"), &gs.tmp.shNDrops, SHADER_UNIFORM_UINT);
+        if (gs.tmp.shNDrops) {
+            SetShaderValueV(ga.postProcFragShader, GetShaderLocation(ga.postProcFragShader, "dropTimes"), gs.tmp.shDropTimes.data(), SHADER_UNIFORM_FLOAT, gs.tmp.shNDrops);
+            SetShaderValueV(ga.postProcFragShader, GetShaderLocation(ga.postProcFragShader, "dropCenters"), gs.tmp.shDropCenters.data(), SHADER_UNIFORM_VEC2, gs.tmp.shNDrops);
+        }
+
+        BeginDrawing();
+        BeginShaderMode(ga.postProcFragShader);
+        DrawTextureRec(gs.tmp.renderTex.texture, Rectangle{0, 0, (float)gs.tmp.renderTex.texture.width, (float)-gs.tmp.renderTex.texture.height}, Vector2Zero(), WHITE);
+        EndShaderMode();
         EndDrawing();
+        
+        //rlEnableShader(_shader.id);
+        //rlSetUniformSampler(GetShaderLocation(_shader, "texture1"), _frontTex.texture.id);
 
         gs.time = GetTime();
     }

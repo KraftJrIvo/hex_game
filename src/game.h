@@ -1,4 +1,5 @@
 #include <array>
+#include <cstdint>
 
 #include "raylib.h"
 
@@ -6,23 +7,27 @@
 #include "raymath.h"
 #include "game_cfg.h"
 
+#ifdef GAME_BASE_DLL    
+#define DO_NOT_SERIALIZE friend zpp::bits::access; using serialize = zpp::bits::members<0>;        
+#else
+#define DO_NOT_SERIALIZE ;
+#endif
+
 struct ThingPos {
     int row, col;
 };
 
-struct ThingRef {
-    bool exists;
-    ThingPos pos;
-};
-
 struct Thing {
     unsigned char clr, shp, sym;
+    bool bomb = false;
+    double triggerTime;
+    bool triggered = false;
 };
 
 struct Tile {
+    bool exists;
+    ThingPos pos;
     Thing thing;
-    ThingRef ref;
-    std::array<ThingRef, 6> neighs;
     float shake = 0.0f;
 };
 
@@ -34,6 +39,8 @@ struct Board {
     std::array<std::array<Tile, BOARD_WIDTH>, BOARD_HEIGHT> things;
     bool even = false;
     double moveTime, totalMoveTime;
+    Arena<MAX_TODROP, ThingPos> todrop;
+    Arena<MAX_TODROP, ThingPos> uncon;
 };
 
 struct Gun {
@@ -53,6 +60,18 @@ struct Particle {
     Vector2 pos = Vector2Zero();
     Vector2 vel = Vector2Zero();
     bool bounced = false;
+    bool masked = false;
+    ThingPos maskTilesStartPos;
+    uint8_t maskId1;
+    uint8_t maskId2;
+};
+
+struct Animation {
+    const Texture2D* tex;
+    double startTime;
+    double interval;
+    Vector2 pos;
+    bool done = false;
 };
 
 struct Bullet {
@@ -65,14 +84,21 @@ struct Bullet {
     float rebounce;
     Vector2 rebCp, rebEnd;
     double rebTime;
-    Arena<MAX_TODROP, ThingPos> todrop;
-    Arena<MAX_TODROP, ThingPos> uncon;
 };
 
 struct GameAssets {
     Texture2D tiles;
+    Texture2D explosion;
+    Texture2D splash;
     Font font;
     Music music;
+    Sound clang[3];
+    Sound sndexp;
+    Sound shatter;
+    Sound whoosh[2];
+    Sound sizzle;
+    Shader postProcFragShader;
+    Shader maskFragShader;
 };
 
 struct GameState {
@@ -81,6 +107,7 @@ struct GameState {
     Gun gun;
     Bullet bullet;
     int score = 0;
+    int combo = 1;
     bool firstShotFired = false;
     bool gameOver = false;
     double time;
@@ -93,6 +120,7 @@ struct GameState {
     bool settingsOpened = false;
     bool alteredDifficulty = false;
     struct UserData {
+        DO_NOT_SERIALIZE
         int bestScore = 0;
         int n_params = 2;
         bool musEnabled = true;
@@ -102,17 +130,27 @@ struct GameState {
         bool operator==(const UserData&) const = default;
     } usr;
     struct Temp {
+        DO_NOT_SERIALIZE
         Arena<MAX_PARTICLES, Particle> particles;
+        Arena<MAX_PARTICLES, Animation> animations;
         bool timeOffsetSet = false;
         double timeOffset;
+        RenderTexture2D renderTex;
+        uint32_t shNDrops = 0;
+        float shTime;
+        float shFadeTime = WAVE_FADE_TIME;
+        Vector2 shScreenSize;
+        std::array<float, 128> shDropTimes;
+        std::array<Vector2, 128> shDropCenters;
+        Vector2 shMaskTilePos;
+        uint32_t shMaskId;
     } tmp;
 };
 
 #ifndef GAME_BASE_DLL
 extern "C" {
     void init(GameAssets& ga, GameState& gs);
-    void loadUserData(GameState& gs);
-    void saveUserData(const GameState& gs);
+    void setState(GameState& gs, const GameState& ngs);
     void updateAndDraw(const GameAssets& ga, GameState& gs);
 }
 #endif
