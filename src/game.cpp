@@ -895,7 +895,7 @@ extern "C" {
             (*((GameState*)(&gs))).tmp.shMaskTilePos = Vector2{float(maskTilePos.col + maskId1), float(maskTilePos.row)};
             (*((GameState*)(&gs))).tmp.shMaskId = maskId2;
             SetShaderValue(gs.ga.p->maskFragShader, GetShaderLocation(gs.ga.p->maskFragShader, "maskTilePos"), &gs.tmp.shMaskTilePos, SHADER_UNIFORM_VEC2);
-            SetShaderValue(gs.ga.p->maskFragShader, GetShaderLocation(gs.ga.p->maskFragShader, "maskId"), &gs.tmp.shMaskId, SHADER_UNIFORM_UINT);
+            SetShaderValue(gs.ga.p->maskFragShader, GetShaderLocation(gs.ga.p->maskFragShader, "maskId"), &gs.tmp.shMaskId, SHADER_UNIFORM_INT);
             BeginDrawing();
             BeginShaderMode(gs.ga.p->maskFragShader);
             rlEnableShader(gs.ga.p->maskFragShader.id);
@@ -1183,7 +1183,7 @@ extern "C" {
         gs.tmp.shScreenSize = {(float)GetScreenWidth(), (float)GetScreenHeight()};
         SetShaderValue(gs.ga.p->postProcFragShader, GetShaderLocation(gs.ga.p->postProcFragShader, "time"), &gs.tmp.shTime, SHADER_UNIFORM_FLOAT);
         SetShaderValue(gs.ga.p->postProcFragShader, GetShaderLocation(gs.ga.p->postProcFragShader, "screenSize"), &gs.tmp.shScreenSize, SHADER_UNIFORM_VEC2);
-        SetShaderValue(gs.ga.p->postProcFragShader, GetShaderLocation(gs.ga.p->postProcFragShader, "nDrops"), &gs.tmp.shNDrops, SHADER_UNIFORM_UINT);
+        SetShaderValue(gs.ga.p->postProcFragShader, GetShaderLocation(gs.ga.p->postProcFragShader, "nDrops"), &gs.tmp.shNDrops, SHADER_UNIFORM_INT);
         if (gs.tmp.shNDrops) {
             SetShaderValueV(gs.ga.p->postProcFragShader, GetShaderLocation(gs.ga.p->postProcFragShader, "dropTimes"), gs.tmp.shDropTimes.data(), SHADER_UNIFORM_FLOAT, gs.tmp.shNDrops);
             SetShaderValueV(gs.ga.p->postProcFragShader, GetShaderLocation(gs.ga.p->postProcFragShader, "dropCenters"), gs.tmp.shDropCenters.data(), SHADER_UNIFORM_VEC2, gs.tmp.shNDrops);
@@ -1194,9 +1194,6 @@ extern "C" {
         DrawTextureRec(gs.tmp.renderTex.texture, Rectangle{0, 0, (float)gs.tmp.renderTex.texture.width, (float)-gs.tmp.renderTex.texture.height}, Vector2Zero(), WHITE);
         EndShaderMode();
         EndDrawing();
-        
-        //rlEnableShader(_shader.id);
-        //rlSetUniformSampler(GetShaderLocation(_shader, "texture1"), _frontTex.texture.id);
 
         gs.time = GetTime();
     }

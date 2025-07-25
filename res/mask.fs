@@ -1,4 +1,4 @@
-#version 330
+#version 300 es
 
 in vec2 fragTexCoord;
 in vec4 fragColor;
@@ -11,7 +11,7 @@ out vec4 finalColor;
 uniform sampler2D tiles;
 
 uniform vec2 maskTilePos;
-uniform uint maskId;
+uniform int maskId;
 
 const vec3 maskColors[5] = vec3[5](vec3(1.,0.,0.), vec3(0.,1.,0.), vec3(0.,0.,1.), vec3(0.,0.,0.), vec3(0.,1.,1.));
 

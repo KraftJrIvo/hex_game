@@ -1,4 +1,4 @@
-#version 330
+#version 300 es
 
 in vec2 fragTexCoord;
 in vec4 fragColor;
@@ -6,7 +6,7 @@ in vec4 fragColor;
 uniform sampler2D texture0;
 uniform vec4 colDiffuse;
 
-uniform uint nDrops;
+uniform int nDrops;
 uniform vec2 dropCenters[128];
 uniform float dropTimes[128];
 uniform float time;       
@@ -17,7 +17,7 @@ out vec4 finalColor;
 void main() {
     vec2 uv = fragTexCoord;
 
-    for (uint i = uint(0); i < nDrops; ++i) {
+    for (int i = int(0); i < nDrops; ++i) {
         // Convert drop center from pixels to UV
         vec2 dropUV = vec2(dropCenters[i].x, screenSize.y - dropCenters[i].y) / screenSize;
 
